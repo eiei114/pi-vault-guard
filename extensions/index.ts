@@ -1,88 +1,68 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { formatGreeting, type GreetingMode } from "../lib/greeting.ts";
-import { StringEnum } from "@earendil-works/pi-ai";
+import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
+import { buildVaultGuardStatus, type VaultGuardStatusResult } from "../lib/status.ts";
 
-const greetParameters = Type.Object({
-  name: Type.String({ description: "Name to greet" }),
-  mode: StringEnum(["short", "friendly"] as const, {
-    description: "Greeting style. Prefer short unless the user asks for more warmth.",
-  }),
-});
-
-type GreetParams = {
-  name: string;
-  mode: GreetingMode;
-};
-
-function normalizeGreetArgs(args: unknown): GreetParams {
-  if (!args || typeof args !== "object") {
-    return args as GreetParams;
-  }
-
-  const input = args as {
-    name?: string;
-    mode?: GreetingMode;
-    greetingStyle?: GreetingMode;
-  };
-
-  if (input.greetingStyle && input.mode === undefined) {
-    return { name: input.name ?? "Pi", mode: input.greetingStyle };
-  }
-
-  return args as GreetParams;
-}
+const statusParameters = Type.Object({});
 
 export default function (pi: ExtensionAPI) {
-  pi.registerCommand("template-info", {
-    description: "Show TypeScript template information",
+  pi.registerCommand("vault-guard:status", {
+    description: "Show vault guard status (stub walking skeleton)",
     handler: async (_args, ctx) => {
+      const status = buildVaultGuardStatus();
+      const text = formatStatusText(status);
+
       if (ctx.hasUI) {
-        ctx.ui.notify("TypeScript-first Pi package template loaded.", "info");
+        ctx.ui.notify("Vault Guard status collected", "info");
       }
+
+      console.log(text);
     },
   });
 
   pi.registerTool({
-    name: "template_greet",
-    label: "Template Greet",
-    description: "Return a typed greeting from the Pi package template",
-    promptSnippet: "template_greet: return a typed greeting from the template package",
+    name: "vault_guard_status",
+    label: "Vault Guard Status",
+    description:
+      "Return a stub vault guard status snapshot (vault root, guard version, severity, message)",
+    promptSnippet: "vault_guard_status: inspect vault guard readiness before editing a git-backed vault",
     promptGuidelines: [
-      "Use template_greet only when testing this template package or greeting the user.",
+      "Use vault_guard_status before vault mutation work to confirm Vault Guard is loaded.",
+      "This walking skeleton does not analyze git state yet; treat severity warn as informational.",
     ],
-    parameters: greetParameters,
-    prepareArguments: normalizeGreetArgs,
-    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+    parameters: statusParameters,
+    async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
       if (signal?.aborted) {
         return { content: [{ type: "text", text: "Cancelled" }], details: {} };
       }
 
-      const message = formatGreeting(params);
+      const status = buildVaultGuardStatus();
+      const json = formatStatusJson(status);
 
       return {
-        content: [{ type: "text", text: message }],
-        details: { message, mode: params.mode },
+        content: [{ type: "text", text: json }],
+        details: status,
       };
     },
 
-    renderCall(args, theme, _context) {
-      let text = theme.fg("toolTitle", theme.bold("template_greet "));
-      text += theme.fg("accent", `name=${args.name}`);
-      text += theme.fg("dim", ` mode=${args.mode}`);
-      return new Text(text, 0, 0);
+    renderCall(_args, theme, _context) {
+      return new Text(theme.fg("toolTitle", theme.bold("vault_guard_status")), 0, 0);
     },
 
     renderResult(result, { expanded }, theme, _context) {
-      const details = result.details as { message: string; mode: string } | undefined;
+      const details = result.details as VaultGuardStatusResult | undefined;
       const content = result.content[0];
-      const message =
-        details?.message ?? (content?.type === "text" ? content.text : "");
+      const fallback = content?.type === "text" ? content.text : "";
+      const status = details ?? (fallback ? (JSON.parse(fallback) as VaultGuardStatusResult) : undefined);
 
-      let text = theme.fg("success", "→ ") + theme.fg("text", message);
-      if (expanded && details) {
-        text += `\n${theme.fg("dim", `mode: ${details.mode}`)}`;
+      if (!status) {
+        return new Text(theme.fg("dim", "no status"), 0, 0);
+      }
+
+      let text = theme.fg("success", "→ ") + theme.fg("text", formatStatusText(status));
+      if (expanded) {
+        text += `\n${theme.fg("dim", formatStatusJson(status))}`;
       }
       return new Text(text, 0, 0);
     },
