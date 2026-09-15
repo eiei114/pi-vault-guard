@@ -1,121 +1,61 @@
-# Pi Extension Template
+# pi-vault-guard
 
-[![Join dotfield.xyz on Discord](https://img.shields.io/badge/Join%20dotfield.xyz%20on%20Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/4945dXZVW5)
-
-[![CI](https://github.com/eiei114/pi-extension-template/actions/workflows/ci.yml/badge.svg)](https://github.com/eiei114/pi-extension-template/actions/workflows/ci.yml)
-[![Publish](https://github.com/eiei114/pi-extension-template/actions/workflows/publish.yml/badge.svg)](https://github.com/eiei114/pi-extension-template/actions/workflows/publish.yml)
-[![npm version](https://img.shields.io/npm/v/create-pi-extension.svg)](https://www.npmjs.com/package/create-pi-extension)
-[![npm downloads](https://img.shields.io/npm/dm/create-pi-extension.svg)](https://www.npmjs.com/package/create-pi-extension)
+[![CI](https://github.com/eiei114/pi-vault-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/eiei114/pi-vault-guard/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Pi package](https://img.shields.io/badge/pi-package-purple.svg)](https://pi.dev/packages)
-[![Trusted Publishing](https://img.shields.io/badge/npm-Trusted%20Publishing-blue.svg)](docs/release.md)
-<a href="https://buymeacoffee.com/ekawano114m"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="217" height="60"></a>
 
-> Template for building Pi packages with extensions, Agent Skills, prompts, and themes.
+> Obsidian / git-backed vault mutation guard for Pi agents — warning-first status, begin, and finish gates.
 
 ## What this is
 
-This repository is the **template source** for new Pi extension OSS projects. The published npm package is [`create-pi-extension`](https://www.npmjs.com/package/create-pi-extension) (the scaffold CLI). The repository root is **not** published to npm.
+`pi-vault-guard` helps Pi and Multica agents inspect vault safety before and after editing an Obsidian vault backed by git. This walking skeleton slice ships a stub status command and tool so you can load the package and confirm Vault Guard is active before git analysis lands in later slices.
 
-`create-pi-extension` is live on npm — use `bunx create-pi-extension@latest` to scaffold a new project.
+## Commands
 
-## Features
-
-- Interactive `create-pi-extension` CLI for scoped and unscoped package names.
-- TypeScript-first examples for extensions, Agent Skills, prompts, themes, tools, and TUI components.
-- GitHub Actions CI, npm Trusted Publishing, security policy, issue templates, and release automation.
-- Canonical public README with standard badges, install paths, quick start, package contents, and security guidance.
-- Canonical scaffold README shared by CLI-first generation and the GitHub Template setup checklist.
-
-## Install
-
-Create a new Pi extension package with the published CLI:
-
-```bash
-bunx create-pi-extension@latest my-pi-package
-```
-
-## Quick start
-
-### Primary path (recommended)
-
-Scaffold a new project with the published CLI:
-
-```bash
-bunx create-pi-extension@latest my-pi-package
-```
-
-The CLI copies the bundled template, replaces placeholders, removes bootstrap docs, and can run `git init` plus `bun install`. See [`docs/template-checklist.md`](docs/template-checklist.md) for the minimal follow-up checklist.
-
-For a scoped package name:
-
-```bash
-bunx create-pi-extension@latest @my-scope/my-pi-tool
-```
-
-### Secondary path: GitHub Template
-
-Create a repository from this template when you prefer GitHub-first onboarding:
-
-```bash
-gh repo create OWNER/my-pi-package \
-  --template eiei114/pi-extension-template \
-  --clone
-```
-
-Then follow the **Secondary path** section in [`docs/template-checklist.md`](docs/template-checklist.md) for manual placeholder replacement, metadata, and post-generation cleanup.
-That checklist first copies `scaffold/package-readme.md` to `README.md`, giving GitHub Template users the same standard badges and README structure as CLI-generated packages.
-
-## Legacy npm package
-
-Do **not** use `pi install npm:pi-extension-template` as the main onboarding path. That legacy [`pi-extension-template`](https://www.npmjs.com/package/pi-extension-template) npm package predates the scaffold CLI and is not maintained as the onboarding artifact. Use **`create-pi-extension`** to scaffold a new project instead. After you publish your own extension, install it with `pi install npm:YOUR_PACKAGE_NAME` as documented in that project's README.
-
-## Package contents
-
-| Path | Purpose |
+| Command | Description |
 |---|---|
-| Repository root | Template source (not published to npm) |
-| `packages/create-pi-extension/` | Published scaffold CLI |
-| `scaffold/` | Generated-package README source synced into the bundled template |
-| `docs/` | Maintainer docs and template bootstrap guides |
+| `/vault-guard:status` | Print a readable stub vault guard status (no arguments) |
+
+## Tools
+
+| Tool | Description |
+|---|---|
+| `vault_guard_status` | Return structured JSON with vault root, guard version, severity, and message |
+
+The stub status always reports `severity: "warn"` and `message: "status analyzer not implemented yet"`.
+
+## Local install / dogfood
+
+Load this package from your Obsidian vault checkout for dogfood:
+
+```bash
+cd path/to/your/obsidian-vault
+pi install git:github.com/eiei114/pi-vault-guard -l
+```
+
+Or install from a local clone while developing:
+
+```bash
+cd C:/Users/Keisu/Projects/OSS/pi-vault-guard
+npm install
+pi install . -l
+```
+
+Restart Pi, then run:
+
+```text
+/vault-guard:status
+```
+
+You should see vault root, guard version, `severity: warn`, and the stub analyzer message. Agents can call the `vault_guard_status` tool for the same payload as JSON.
 
 ## Development
 
 ```bash
 npm install
 npm run ci
+pi -e .
 ```
-
-`npm run ci` runs typecheck, `sync:template`, tests, `review:guardrails`, a `create-pi-extension` pack check, and template sync assertions.
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/template-sync.md`](docs/template-sync.md).
-
-## Release
-
-Releases publish **`create-pi-extension`** to npm through Trusted Publishing. The root template source is not published.
-
-See [`docs/release.md`](docs/release.md) for setup details.
-
-## Docs
-
-- [`docs/template-checklist.md`](docs/template-checklist.md) — Primary vs Secondary setup flows
-- [`docs/template-sync.md`](docs/template-sync.md) — refresh `packages/create-pi-extension/template/` before CLI publish
-- [`docs/template-sync-checklist.md`](docs/template-sync-checklist.md) — checklist for syncing and verifying the bundled template
-- [`docs/examples.md`](docs/examples.md) — extension, skill, prompt, and theme examples
-- [`docs/release.md`](docs/release.md) — Trusted Publishing and monorepo publish path
-- [`ROADMAP.md`](ROADMAP.md) — current status, priorities, and the maintenance seed backlog
-
-## Security
-
-Pi packages can execute code with your local permissions. Review extensions before installing third-party packages.
-
-For vulnerability reporting, see [`SECURITY.md`](SECURITY.md).
-
-## Links
-
-- npm (`create-pi-extension`): https://www.npmjs.com/package/create-pi-extension
-- GitHub: https://github.com/eiei114/pi-extension-template
-- Issues: https://github.com/eiei114/pi-extension-template/issues
 
 ## License
 
