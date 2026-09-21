@@ -9,6 +9,14 @@ export function formatStatusText(status: VaultGuardStatusResult): string {
     `  vault root: ${status.vaultRoot}`,
     `  guard version: ${status.guardVersion}`,
     `  severity: ${status.severity}`,
+    `  branch: ${status.branch ?? "(detached)"}`,
+    `  upstream: ${status.upstream ?? "(none)"}`,
+    `  ahead/behind: ${status.ahead}/${status.behind}`,
+    `  dirty paths: ${status.dirtyPaths.length}`,
+    `  suspicious paths: ${status.suspiciousPaths.length}`,
+    `  unpushed commits: ${status.unpushedCommitCount}`,
+    `  likely Obsidian Git auto-backup: ${status.likelyObsidianGitAutoBackup}`,
+    `  next action: ${status.recommendedNextAction}`,
     `  message: ${status.message}`,
   ].join("\n");
 }

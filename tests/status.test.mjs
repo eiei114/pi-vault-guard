@@ -1,30 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { classifyDirtyPath, parseAheadBehind, parsePorcelainStatus, buildVaultGuardStatus } from "../lib/status.ts";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
-import { buildVaultGuardStatus } from "../lib/status.ts";
 
-test("buildVaultGuardStatus returns walking skeleton stub fields", () => {
-  const status = buildVaultGuardStatus("/tmp/example-vault");
+test("parses porcelain paths and classifies risky files", () => {
+  const paths = parsePorcelainStatus(" M notes.md\n?? .pi/settings.json\n?? exports/report.pdf\n");
+  assert.deepEqual(paths.map(({ path, kind }) => ({ path, kind })), [
+    { path: "notes.md", kind: "tracked" },
+    { path: ".pi/settings.json", kind: "untracked" },
+    { path: "exports/report.pdf", kind: "untracked" },
+  ]);
+  assert.equal(classifyDirtyPath(".pi/settings.json", " M"), "pi-settings");
+});
 
-  assert.equal(status.vaultRoot, "/tmp/example-vault");
+test("parses ahead and behind counts", () => {
+  assert.deepEqual(parseAheadBehind("3\t2"), { ahead: 3, behind: 2 });
+  assert.deepEqual(parseAheadBehind(null), { ahead: 0, behind: 0 });
+});
+
+test("non-git directories return a controlled warning", () => {
+  const status = buildVaultGuardStatus("/path/that/does/not/exist");
+  assert.equal(status.isGitRepository, false);
   assert.equal(status.severity, "warn");
-  assert.match(status.message, /status analyzer not implemented yet/i);
-  assert.match(status.guardVersion, /^\d+\.\d+\.\d+/);
+  assert.match(status.message, /not a git repository/);
 });
 
-test("formatStatusText renders readable multi-line output", () => {
-  const status = buildVaultGuardStatus("/vault/root");
-  const text = formatStatusText(status);
-
-  assert.match(text, /Vault Guard status/);
-  assert.match(text, /vault root: \/vault\/root/);
-  assert.match(text, /severity: warn/);
-  assert.match(text, /status analyzer not implemented yet/);
-});
-
-test("formatStatusJson returns structured JSON", () => {
-  const status = buildVaultGuardStatus("/vault/root");
-  const parsed = JSON.parse(formatStatusJson(status));
-
-  assert.deepEqual(parsed, status);
+test("renders structured analyzer output", () => {
+  const status = buildVaultGuardStatus(process.cwd());
+  assert.equal(JSON.parse(formatStatusJson(status)).vaultRoot, status.vaultRoot);
+  assert.match(formatStatusText(status), /ahead\/behind/);
 });

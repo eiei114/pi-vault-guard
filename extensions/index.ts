@@ -4,13 +4,15 @@ import { Type } from "typebox";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
 import { buildVaultGuardStatus, type VaultGuardStatusResult } from "../lib/status.ts";
 
-const statusParameters = Type.Object({});
+const statusParameters = Type.Object({
+  vaultRoot: Type.Optional(Type.String({ description: "Vault root; defaults to the current working directory" })),
+});
 
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("vault-guard:status", {
-    description: "Show vault guard status (stub walking skeleton)",
-    handler: async (_args, ctx) => {
-      const status = buildVaultGuardStatus();
+    description: "Show Vault Guard status from read-only git analysis",
+    handler: async (args, ctx) => {
+      const status = buildVaultGuardStatus(args.trim() || undefined);
       const text = formatStatusText(status);
 
       if (ctx.hasUI) {
@@ -25,19 +27,19 @@ export default function (pi: ExtensionAPI) {
     name: "vault_guard_status",
     label: "Vault Guard Status",
     description:
-      "Return a stub vault guard status snapshot (vault root, guard version, severity, message)",
+      "Return a read-only git-backed vault status snapshot including branch, dirty paths, and unpushed commits",
     promptSnippet: "vault_guard_status: inspect vault guard readiness before editing a git-backed vault",
     promptGuidelines: [
-      "Use vault_guard_status before vault mutation work to confirm Vault Guard is loaded.",
-      "This walking skeleton does not analyze git state yet; treat severity warn as informational.",
+      "Use vault_guard_status before vault mutation work to inspect branch and dirty state.",
+      "Review suspicious paths and recommendedNextAction before editing.",
     ],
     parameters: statusParameters,
-    async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       if (signal?.aborted) {
         return { content: [{ type: "text", text: "Cancelled" }], details: {} };
       }
 
-      const status = buildVaultGuardStatus();
+      const status = buildVaultGuardStatus(params.vaultRoot);
       const json = formatStatusJson(status);
 
       return {
