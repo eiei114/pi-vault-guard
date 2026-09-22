@@ -1,5 +1,6 @@
 import { cwd } from "node:process";
 import { execFileSync } from "node:child_process";
+import { relative, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 
 export type VaultGuardSeverity = "ok" | "warn" | "block";
@@ -33,20 +34,45 @@ export interface VaultGuardStatusResult {
   unpushedCommitCount: number;
   recentUnpushedCommitSubjects: string[];
   likelyObsidianGitAutoBackup: boolean;
+  gitErrors: string[];
   severity: VaultGuardSeverity;
   recommendedNextAction: string;
   message: string;
 }
 
-function git(root: string, args: string[]): string | null {
-  try {
-    return execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return null;
+type GitCommandResult =
+  | { ok: true; value: string }
+  | { ok: false; message: string };
+
+function errorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null && "stderr" in error) {
+    const stderr = error.stderr;
+    if (typeof stderr === "string" && stderr.trim()) return stderr.trim();
+    if (Buffer.isBuffer(stderr) && stderr.toString("utf8").trim()) return stderr.toString("utf8").trim();
   }
+  return error instanceof Error ? error.message : String(error);
+}
+
+function git(root: string, args: string[]): GitCommandResult {
+  try {
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !["GIT_DIR", "GIT_WORK_TREE"].includes(key.toUpperCase())),
+    );
+    return {
+      ok: true,
+      value: execFileSync("git", ["-C", root, ...args], {
+      encoding: "utf8",
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      }).trimEnd(),
+    };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
+function isMissingUpstream(message: string): boolean {
+  return /no upstream|upstream.*(not|unset|configured)|unknown revision.*@\{upstream\}|HEAD does not point to a branch/i.test(message);
 }
 
 /** Parse porcelain v1 output without treating its two-character status as a path. */
@@ -87,10 +113,11 @@ function autoBackupHeuristic(subjects: string[], paths: string[]): boolean {
 
 /** Collect a read-only, deterministic snapshot of a git-backed vault. */
 export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStatusResult {
-  const resolvedRoot = git(vaultRoot, ["rev-parse", "--show-toplevel"]);
-  if (!resolvedRoot) {
+  const requestedRoot = resolve(vaultRoot);
+  const rootResult = git(requestedRoot, ["rev-parse", "--show-toplevel"]);
+  if (!rootResult.ok) {
     return {
-      vaultRoot,
+      vaultRoot: requestedRoot,
       guardVersion: packageJson.version,
       isGitRepository: false,
       branch: null,
@@ -105,41 +132,80 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
       unpushedCommitCount: 0,
       recentUnpushedCommitSubjects: [],
       likelyObsidianGitAutoBackup: false,
+      gitErrors: [],
       severity: "warn",
       recommendedNextAction: "Initialize or select a git-backed vault before making guarded edits.",
       message: "vault root is not a git repository",
     };
   }
 
-  const branch = git(resolvedRoot, ["branch", "--show-current"]) || null;
-  const upstream = git(resolvedRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]) || null;
-  const counts = parseAheadBehind(upstream ? git(resolvedRoot, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]) : null);
-  const dirtyPaths = parsePorcelainStatus(git(resolvedRoot, ["status", "--porcelain=v1"]) ?? "");
-  const recentUnpushedCommitSubjects = upstream
-    ? (git(resolvedRoot, ["log", "--format=%s", "-n", "5", "@{upstream}..HEAD"]) ?? "").split(/\r?\n/).filter(Boolean)
-    : [];
+  const resolvedRoot = rootResult.value;
+  const gitErrors: string[] = [];
+  const branchResult = git(resolvedRoot, ["branch", "--show-current"]);
+  if (!branchResult.ok) gitErrors.push(`branch: ${branchResult.message}`);
+  const branch = branchResult.ok && branchResult.value ? branchResult.value : null;
+
+  const upstreamResult = git(resolvedRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
+  if (!upstreamResult.ok && !isMissingUpstream(upstreamResult.message)) {
+    gitErrors.push(`upstream: ${upstreamResult.message}`);
+  }
+  const upstream = upstreamResult.ok && upstreamResult.value ? upstreamResult.value : null;
+
+  let counts = { ahead: 0, behind: 0 };
+  if (upstream) {
+    const countResult = git(resolvedRoot, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]);
+    if (countResult.ok) counts = parseAheadBehind(countResult.value);
+    else gitErrors.push(`ahead-behind: ${countResult.message}`);
+  }
+
+  const scope = relative(resolvedRoot, requestedRoot).replaceAll("\\", "/");
+  const statusArgs = ["status", "--porcelain=v1"];
+  if (scope && scope !== ".") statusArgs.push("--", scope);
+  const statusResult = git(resolvedRoot, statusArgs);
+  if (!statusResult.ok) gitErrors.push(`status: ${statusResult.message}`);
+  const dirtyPaths = statusResult.ok ? parsePorcelainStatus(statusResult.value) : [];
+
+  let recentUnpushedCommitSubjects: string[] = [];
+  if (upstream) {
+    const logResult = git(resolvedRoot, ["log", "--format=%s", "-n", "5", "@{upstream}..HEAD"]);
+    if (logResult.ok) recentUnpushedCommitSubjects = logResult.value.split(/\r?\n/).filter(Boolean);
+    else gitErrors.push(`log: ${logResult.message}`);
+  }
   const suspiciousPaths = dirtyPaths.filter((entry) => entry.suspicious).map((entry) => entry.path);
-  const severity: VaultGuardSeverity = suspiciousPaths.length > 0 || counts.behind > 0 ? "warn" : "ok";
+  const severity: VaultGuardSeverity = gitErrors.length > 0
+    ? "block"
+    : branch === null || suspiciousPaths.length > 0 || counts.behind > 0
+      ? "warn"
+      : "ok";
 
   return {
-    vaultRoot: resolvedRoot,
+    vaultRoot: requestedRoot,
     guardVersion: packageJson.version,
     isGitRepository: true,
     branch,
     upstream,
     ...counts,
-    dirty: dirtyPaths.length > 0,
+    dirty: !statusResult.ok || dirtyPaths.length > 0,
     dirtyPaths,
     trackedDirtyPaths: dirtyPaths.filter((entry) => entry.kind === "tracked").map((entry) => entry.path),
     untrackedPaths: dirtyPaths.filter((entry) => entry.kind === "untracked").map((entry) => entry.path),
     suspiciousPaths,
-    unpushedCommitCount: recentUnpushedCommitSubjects.length,
+    unpushedCommitCount: counts.ahead,
     recentUnpushedCommitSubjects,
     likelyObsidianGitAutoBackup: autoBackupHeuristic(recentUnpushedCommitSubjects, suspiciousPaths),
+    gitErrors,
     severity,
-    recommendedNextAction: severity === "ok"
-      ? "Vault is ready for guarded edits."
-      : "Review the reported paths and branch state before editing.",
-    message: dirtyPaths.length === 0 && counts.behind === 0 ? "vault is clean" : "vault requires review",
+    recommendedNextAction: gitErrors.length > 0
+      ? "Resolve the reported Git status errors before making guarded edits."
+      : branch === null
+        ? "Create or select a branch before making guarded edits."
+        : severity === "ok"
+          ? "Vault is ready for guarded edits."
+          : "Review the reported paths and branch state before editing.",
+    message: gitErrors.length > 0
+      ? `vault status is incomplete: ${gitErrors.join("; ")}`
+      : dirtyPaths.length === 0 && counts.behind === 0
+        ? "vault is clean"
+        : "vault requires review",
   };
 }
