@@ -1,6 +1,6 @@
 import { cwd } from "node:process";
 import { execFileSync } from "node:child_process";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 
 export type VaultGuardSeverity = "ok" | "warn" | "block";
@@ -158,10 +158,10 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
     else gitErrors.push(`ahead-behind: ${countResult.message}`);
   }
 
-  const scope = relative(resolvedRoot, requestedRoot).replaceAll("\\", "/");
-  const statusArgs = ["status", "--porcelain=v1"];
-  if (scope && scope !== ".") statusArgs.push("--", scope);
-  const statusResult = git(resolvedRoot, statusArgs);
+  // Run status from the requested root so nested vaults are scoped by `.`.
+  // This avoids platform-specific pathspec handling while Git still reports
+  // paths relative to the repository root.
+  const statusResult = git(requestedRoot, ["status", "--porcelain=v1", "--", "."]);
   if (!statusResult.ok) gitErrors.push(`status: ${statusResult.message}`);
   const dirtyPaths = statusResult.ok ? parsePorcelainStatus(statusResult.value) : [];
 
