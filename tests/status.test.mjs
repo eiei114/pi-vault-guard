@@ -31,11 +31,26 @@ test("non-git directories return a controlled warning", () => {
 });
 
 test("detached repositories warn before guarded edits", () => {
-  const status = buildVaultGuardStatus(process.cwd());
-  assert.equal(status.branch, null);
-  assert.equal(status.severity, "warn");
-  assert.match(status.recommendedNextAction, /Create or select a branch/);
-  assert.match(formatStatusText(status), /branch: \(detached\)/);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-detached-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "notes\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "initial"]);
+  git(["checkout", "-q", "--detach"]);
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    assert.equal(status.isGitRepository, true);
+    assert.equal(status.branch, null);
+    assert.equal(status.severity, "warn");
+    assert.match(status.recommendedNextAction, /Create or select a branch/);
+    assert.match(formatStatusText(status), /branch: \(detached\)/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test("scopes nested vault status and ignores inherited git locations", () => {
