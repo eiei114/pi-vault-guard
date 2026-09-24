@@ -77,17 +77,17 @@ function isMissingUpstream(message: string): boolean {
 
 /** Parse porcelain v1 output without treating its two-character status as a path. */
 export function parsePorcelainStatus(output: string): DirtyPath[] {
-  return output
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      const status = line.slice(0, 2);
-      // For renames porcelain prints "old -> new"; the new path is the useful one.
-      const rawPath = line.slice(3).trim();
-      const path = rawPath.includes(" -> ") ? rawPath.split(" -> ").at(-1)! : rawPath;
-      const kind = classifyDirtyPath(path, status);
-      return { path, status, kind, suspicious: kind !== "tracked" };
-    });
+  const paths: DirtyPath[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    if (!line) continue;
+    const status = line.slice(0, 2);
+    // For renames porcelain prints "old -> new"; the new path is the useful one.
+    const rawPath = line.slice(3).trim();
+    const path = rawPath.includes(" -> ") ? rawPath.split(" -> ").at(-1)! : rawPath;
+    const kind = classifyDirtyPath(path, status);
+    paths.push({ path, status, kind, suspicious: kind !== "tracked" });
+  }
+  return paths;
 }
 
 export function parseAheadBehind(output: string | null): { ahead: number; behind: number } {
@@ -96,7 +96,7 @@ export function parseAheadBehind(output: string | null): { ahead: number; behind
 }
 
 export function classifyDirtyPath(path: string, status = "  "): DirtyPathKind {
-  const normalized = path.replaceAll("\\", "/");
+  const normalized = path.includes("\\") ? path.replaceAll("\\", "/") : path;
   if (status === "??") return "untracked";
   if (normalized === ".pi/settings.json") return "pi-settings";
   if (normalized.startsWith(".pi/")) return "pi-runtime";
