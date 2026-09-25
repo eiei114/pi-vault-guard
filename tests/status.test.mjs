@@ -27,7 +27,37 @@ test("non-git directories return a controlled warning", () => {
   assert.equal(status.isGitRepository, false);
   assert.equal(status.severity, "warn");
   assert.match(status.message, /not a git repository/);
-  assert.match(formatStatusText(status), /not a git repository/);
+  assert.match(formatStatusText(status), /branch: \(not a git repository\)/);
+});
+
+test("reports all unpushed commits while previewing only the five newest", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-unpushed-"));
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-remote-"));
+  const git = (root, args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  git(remoteDir, ["init", "--bare", "-q"]);
+  git(tmpDir, ["init", "-q"]);
+  git(tmpDir, ["config", "user.name", "Vault Guard Test"]);
+  git(tmpDir, ["config", "user.email", "vault-guard@example.invalid"]);
+  git(tmpDir, ["branch", "-M", "main"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "initial\n");
+  git(tmpDir, ["add", "."]);
+  git(tmpDir, ["commit", "-q", "-m", "initial"]);
+  git(tmpDir, ["remote", "add", "origin", remoteDir]);
+  git(tmpDir, ["push", "-q", "-u", "origin", "main"]);
+  for (let index = 1; index <= 6; index += 1) {
+    fs.writeFileSync(path.join(tmpDir, "notes.md"), `change ${index}\n`);
+    git(tmpDir, ["commit", "-q", "-am", `change ${index}`]);
+  }
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    assert.equal(status.ahead, 6);
+    assert.equal(status.unpushedCommitCount, 6);
+    assert.deepEqual(status.recentUnpushedCommitSubjects, ["change 6", "change 5", "change 4", "change 3", "change 2"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+  }
 });
 
 test("detached repositories warn before guarded edits", () => {
