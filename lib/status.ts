@@ -71,15 +71,11 @@ function git(root: string, args: string[]): GitCommandResult {
   }
 }
 
-function isMissingUpstream(message: string): boolean {
-  return /no upstream|upstream.*(not|unset|configured)|unknown revision.*@\{upstream\}|HEAD does not point to a branch/i.test(message);
-}
-
 /** Parse porcelain v1 output without treating its two-character status as a path. */
 export function parsePorcelainStatus(output: string): DirtyPath[] {
   const paths: DirtyPath[] = [];
   for (const line of output.split(/\r?\n/)) {
-    if (!line) continue;
+    if (!line || line.startsWith("## ")) continue;
     const status = line.slice(0, 2);
     // For renames porcelain prints "old -> new"; the new path is the useful one.
     const rawPath = line.slice(3).trim();
@@ -93,6 +89,36 @@ export function parsePorcelainStatus(output: string): DirtyPath[] {
 export function parseAheadBehind(output: string | null): { ahead: number; behind: number } {
   const match = output?.trim().match(/^(\d+)\s+(\d+)$/);
   return match ? { ahead: Number(match[1]), behind: Number(match[2]) } : { ahead: 0, behind: 0 };
+}
+
+export function parsePorcelainBranch(output: string): {
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+} {
+  const header = output.split(/\r?\n/, 1)[0];
+  const headerDetails = header.startsWith("## ") ? header.slice(3) : "";
+  const details = headerDetails.startsWith("No commits yet on ")
+    ? headerDetails.slice("No commits yet on ".length)
+    : headerDetails;
+  if (!details || details === "HEAD (no branch)") {
+    return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  }
+
+  const match = details.match(/^(.+?)(?:\.\.\.([^\s]+))?(?: \[(.*)\])?$/);
+  if (!match) return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const counts = match[3] ?? "";
+  // A deleted upstream branch reads `[gone]`; treat it as no upstream so the
+  // caller keeps the previous "missing upstream is not fatal" behavior instead
+  // of failing to resolve `@{upstream}`.
+  const upstream = counts === "gone" ? null : match[2] ?? null;
+  return {
+    branch: match[1],
+    upstream,
+    ahead: Number(counts.match(/ahead (\d+)/)?.[1] ?? 0),
+    behind: Number(counts.match(/behind (\d+)/)?.[1] ?? 0),
+  };
 }
 
 export function classifyDirtyPath(path: string, status = "  "): DirtyPathKind {
@@ -141,28 +167,15 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
 
   const resolvedRoot = rootResult.value;
   const gitErrors: string[] = [];
-  const branchResult = git(resolvedRoot, ["branch", "--show-current"]);
-  if (!branchResult.ok) gitErrors.push(`branch: ${branchResult.message}`);
-  const branch = branchResult.ok && branchResult.value ? branchResult.value : null;
-
-  const upstreamResult = git(resolvedRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
-  if (!upstreamResult.ok && !isMissingUpstream(upstreamResult.message)) {
-    gitErrors.push(`upstream: ${upstreamResult.message}`);
-  }
-  const upstream = upstreamResult.ok && upstreamResult.value ? upstreamResult.value : null;
-
-  let counts = { ahead: 0, behind: 0 };
-  if (upstream) {
-    const countResult = git(resolvedRoot, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]);
-    if (countResult.ok) counts = parseAheadBehind(countResult.value);
-    else gitErrors.push(`ahead-behind: ${countResult.message}`);
-  }
-
-  // Run status from the requested root so nested vaults are scoped by `.`.
-  // This avoids platform-specific pathspec handling while Git still reports
-  // paths relative to the repository root.
-  const statusResult = git(requestedRoot, ["status", "--porcelain=v1", "--", "."]);
+  // Porcelain branch headers include branch, upstream, and ahead/behind counts.
+  // Reading them with status avoids three additional Git process launches.
+  const statusResult = git(requestedRoot, ["status", "--porcelain=v1", "--branch", "--", "."]);
   if (!statusResult.ok) gitErrors.push(`status: ${statusResult.message}`);
+  const branchInfo = statusResult.ok
+    ? parsePorcelainBranch(statusResult.value)
+    : { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const { branch, upstream } = branchInfo;
+  const counts = { ahead: branchInfo.ahead, behind: branchInfo.behind };
   const dirtyPaths = statusResult.ok ? parsePorcelainStatus(statusResult.value) : [];
 
   let recentUnpushedCommitSubjects: string[] = [];
