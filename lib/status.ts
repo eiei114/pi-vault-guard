@@ -109,9 +109,13 @@ export function parsePorcelainBranch(output: string): {
   const match = details.match(/^(.+?)(?:\.\.\.([^\s]+))?(?: \[(.*)\])?$/);
   if (!match) return { branch: null, upstream: null, ahead: 0, behind: 0 };
   const counts = match[3] ?? "";
+  // A deleted upstream branch reads `[gone]`; treat it as no upstream so the
+  // caller keeps the previous "missing upstream is not fatal" behavior instead
+  // of failing to resolve `@{upstream}`.
+  const upstream = counts === "gone" ? null : match[2] ?? null;
   return {
     branch: match[1],
-    upstream: match[2] ?? null,
+    upstream,
     ahead: Number(counts.match(/ahead (\d+)/)?.[1] ?? 0),
     behind: Number(counts.match(/behind (\d+)/)?.[1] ?? 0),
   };

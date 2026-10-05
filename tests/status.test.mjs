@@ -47,6 +47,12 @@ test("parses branch metadata from porcelain status headers", () => {
     ahead: 0,
     behind: 0,
   });
+  assert.deepEqual(parsePorcelainBranch("## main...origin/main [gone]\n"), {
+    branch: "main",
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+  });
 });
 
 test("non-git directories return a controlled warning", () => {
@@ -107,6 +113,35 @@ test("detached repositories warn before guarded edits", () => {
     assert.match(formatStatusText(status), /branch: \(detached\)/);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("a deleted upstream branch does not block the vault guard", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-gone-"));
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-gone-remote-"));
+  const git = (root, args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  git(remoteDir, ["init", "--bare", "-q"]);
+  git(tmpDir, ["init", "-q"]);
+  git(tmpDir, ["config", "user.name", "Vault Guard Test"]);
+  git(tmpDir, ["config", "user.email", "vault-guard@example.invalid"]);
+  git(tmpDir, ["branch", "-M", "main"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "notes\n");
+  git(tmpDir, ["add", "."]);
+  git(tmpDir, ["commit", "-q", "-m", "initial"]);
+  git(tmpDir, ["remote", "add", "origin", remoteDir]);
+  git(tmpDir, ["push", "-q", "-u", "origin", "main"]);
+  git(remoteDir, ["branch", "-D", "main"]);
+  git(tmpDir, ["fetch", "-q", "--prune"]);
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    assert.equal(status.branch, "main");
+    assert.equal(status.upstream, null);
+    assert.deepEqual(status.gitErrors, []);
+    assert.equal(status.severity, "ok");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(remoteDir, { recursive: true, force: true });
   }
 });
 
