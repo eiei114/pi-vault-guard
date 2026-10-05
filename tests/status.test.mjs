@@ -4,7 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { classifyDirtyPath, parseAheadBehind, parsePorcelainStatus, buildVaultGuardStatus } from "../lib/status.ts";
+import {
+  classifyDirtyPath,
+  parseAheadBehind,
+  parsePorcelainBranch,
+  parsePorcelainStatus,
+  buildVaultGuardStatus,
+} from "../lib/status.ts";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
 
 test("parses porcelain paths and classifies risky files", () => {
@@ -20,6 +26,21 @@ test("parses porcelain paths and classifies risky files", () => {
 test("parses ahead and behind counts", () => {
   assert.deepEqual(parseAheadBehind("3\t2"), { ahead: 3, behind: 2 });
   assert.deepEqual(parseAheadBehind(null), { ahead: 0, behind: 0 });
+});
+
+test("parses branch metadata from porcelain status headers", () => {
+  assert.deepEqual(parsePorcelainBranch("## main...origin/main [ahead 3, behind 2]\n M notes.md\n"), {
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 3,
+    behind: 2,
+  });
+  assert.deepEqual(parsePorcelainBranch("## HEAD (no branch)\n"), {
+    branch: null,
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+  });
 });
 
 test("non-git directories return a controlled warning", () => {
