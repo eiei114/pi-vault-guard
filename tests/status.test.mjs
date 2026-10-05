@@ -41,6 +41,12 @@ test("parses branch metadata from porcelain status headers", () => {
     ahead: 0,
     behind: 0,
   });
+  assert.deepEqual(parsePorcelainBranch("## No commits yet on main\n"), {
+    branch: "main",
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+  });
 });
 
 test("non-git directories return a controlled warning", () => {

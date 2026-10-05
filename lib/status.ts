@@ -98,7 +98,10 @@ export function parsePorcelainBranch(output: string): {
   behind: number;
 } {
   const header = output.split(/\r?\n/, 1)[0];
-  const details = header.startsWith("## ") ? header.slice(3) : "";
+  const headerDetails = header.startsWith("## ") ? header.slice(3) : "";
+  const details = headerDetails.startsWith("No commits yet on ")
+    ? headerDetails.slice("No commits yet on ".length)
+    : headerDetails;
   if (!details || details === "HEAD (no branch)") {
     return { branch: null, upstream: null, ahead: 0, behind: 0 };
   }
