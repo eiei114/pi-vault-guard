@@ -79,7 +79,8 @@ export function parsePorcelainStatus(output: string): DirtyPath[] {
     const status = line.slice(0, 2);
     // For renames porcelain prints "old -> new"; the new path is the useful one.
     const rawPath = line.slice(3).trim();
-    const path = rawPath.includes(" -> ") ? rawPath.split(" -> ").at(-1)! : rawPath;
+    const renameSeparator = rawPath.lastIndexOf(" -> ");
+    const path = renameSeparator >= 0 ? rawPath.slice(renameSeparator + 4) : rawPath;
     const kind = classifyDirtyPath(path, status);
     paths.push({ path, status, kind, suspicious: kind !== "tracked" });
   }
