@@ -27,7 +27,7 @@ export interface VaultGuardLock {
 
 export interface VaultGuardLockSummary {
   path: string;
-  state: "owned" | "other" | "stale" | "malformed";
+  state: "none" | "owned" | "other" | "stale" | "malformed";
   lock: VaultGuardLock | null;
   message: string;
 }
@@ -80,7 +80,7 @@ export function readVaultGuardLock(vaultRoot: string, now = Date.now()): VaultGu
     return { path, state: "other", lock: parsed, message: "active lock marker exists" };
   } catch (error) {
     const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
-    if (code === "ENOENT") return { path, state: "owned", lock: null, message: "no lock marker exists" };
+    if (code === "ENOENT") return { path, state: "none", lock: null, message: "no lock marker exists" };
     return { path, state: "malformed", lock: null, message: `unable to read lock marker: ${String(error)}` };
   }
 }
@@ -136,7 +136,13 @@ export function buildVaultGuardBegin(params: VaultGuardBeginParams): VaultGuardB
   try {
     mkdirSync(join(vaultRoot, ".pi", "vault-guard"), { recursive: true });
     const fd = openSync(path, "wx");
-    try { writeFileSync(fd, `${JSON.stringify(lock, null, 2)}\n`, "utf8"); } finally { closeSync(fd); }
+    try { writeFileSync(fd, `${JSON.stringify(lock, null, 2)}\n`, "utf8"); }
+    catch (writeError) {
+      try { closeSync(fd); } catch {}
+      try { unlinkSync(path); } catch {}
+      throw writeError;
+    }
+    closeSync(fd);
     return { status, lock: { path, state: "owned", lock, message: "lock marker created" }, created: true, severity: "ok", message: "lock marker created" };
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
