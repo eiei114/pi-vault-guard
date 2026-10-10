@@ -8,21 +8,22 @@
 
 ## What this is
 
-`pi-vault-guard` helps Pi and Multica agents inspect vault safety before and after editing an Obsidian vault backed by git. This walking skeleton slice ships a stub status command and tool so you can load the package and confirm Vault Guard is active before git analysis lands in later slices.
+`pi-vault-guard` helps Pi and Multica agents inspect vault safety before and after editing an Obsidian vault backed by git. Status analysis is read-only; begin creates an advisory, run-owned lock marker.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `/vault-guard:status` | Print a readable stub vault guard status (no arguments) |
+| `/vault-guard:status` | Print a readable vault guard status (no arguments) |
 
 ## Tools
 
 | Tool | Description |
 |---|---|
-| `vault_guard_status` | Return structured JSON with vault root, guard version, severity, and message |
+| `vault_guard_status` | Return structured JSON with vault and lock state |
+| `vault_guard_begin` | Preflight and create a run-owned lock marker |
 
-The stub status always reports `severity: "warn"` and `message: "status analyzer not implemented yet"`.
+The advisory lock is stored at `.pi/vault-guard/lock.json`, which is ignored as local runtime state. Active locks owned by another session block begin; stale or malformed markers are reported without crashing. Begin metadata includes issue ID/identifier, session ID, purpose, and owner.
 
 ## Local install / dogfood
 
@@ -47,7 +48,7 @@ Restart Pi, then run:
 /vault-guard:status
 ```
 
-You should see vault root, guard version, `severity: warn`, and the stub analyzer message. Agents can call the `vault_guard_status` tool for the same payload as JSON.
+You should see vault root, guard version, severity, and lock state. Agents can call `vault_guard_status` or `vault_guard_begin` for structured JSON.
 
 ## Development
 

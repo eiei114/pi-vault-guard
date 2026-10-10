@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { syncBuiltinESMExports } from "node:module";
 import {
   classifyDirtyPath,
   parseAheadBehind,
@@ -12,6 +13,7 @@ import {
   buildVaultGuardStatus,
 } from "../lib/status.ts";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
+import { buildVaultGuardBegin, readVaultGuardLock, lockPath } from "../lib/lock.ts";
 
 test("parses porcelain paths and classifies risky files", () => {
   const paths = parsePorcelainStatus(" M notes.md\n?? .pi/settings.json\n?? exports/report.pdf\n");
@@ -178,6 +180,53 @@ test("scopes nested vault status and ignores inherited git locations", () => {
     else process.env.GIT_WORK_TREE = previousGitWorkTree;
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.rmSync(otherDir, { recursive: true, force: true });
+  }
+});
+
+test("creates an owned lock and refuses another owner", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-lock-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  git(["init", "-q"]); git(["config", "user.name", "Vault Guard Test"]); git(["config", "user.email", "vault-guard@example.invalid"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "notes\\n"); git(["add", "."]); git(["commit", "-q", "-m", "initial"]);
+  const params = { vaultRoot: tmpDir, issueId: "issue-1", issueIdentifier: "DOT-1", sessionId: "session-1", purpose: "test", owner: { type: "agent", id: "agent-1" } };
+  try {
+    assert.equal(readVaultGuardLock(tmpDir).state, "none");
+    assert.equal(buildVaultGuardStatus(tmpDir).lock.state, "none");
+    const first = buildVaultGuardBegin(params);
+    assert.equal(first.created, true); assert.equal(first.severity, "ok");
+    assert.equal(JSON.parse(fs.readFileSync(lockPath(tmpDir), "utf8")).issueIdentifier, "DOT-1");
+    const second = buildVaultGuardBegin({ ...params, sessionId: "session-2", owner: { type: "agent", id: "agent-2" } });
+    assert.equal(second.created, false); assert.equal(second.severity, "block");
+    const malformed = lockPath(tmpDir); fs.writeFileSync(malformed, "not json");
+    assert.equal(readVaultGuardLock(tmpDir).state, "malformed");
+    const missing = buildVaultGuardBegin({ vaultRoot: tmpDir });
+    assert.equal(missing.severity, "block"); assert.match(missing.message, /missing metadata/);
+  } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
+});
+
+test("removes a newly created lock marker after a write failure", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-lock-write-failure-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  git(["init", "-q"]); git(["config", "user.name", "Vault Guard Test"]); git(["config", "user.email", "vault-guard@example.invalid"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "notes\n"); git(["add", "."]); git(["commit", "-q", "-m", "initial"]);
+  const originalWriteFileSync = fs.writeFileSync;
+  const writeError = new Error("simulated lock write failure");
+  const params = { vaultRoot: tmpDir, issueId: "issue-1", issueIdentifier: "DOT-1", sessionId: "session-1", purpose: "test", owner: { type: "agent", id: "agent-1" } };
+  try {
+    fs.writeFileSync = (file, ...args) => {
+      if (typeof file === "number") throw writeError;
+      return originalWriteFileSync.call(fs, file, ...args);
+    };
+    syncBuiltinESMExports();
+    const result = buildVaultGuardBegin(params);
+    assert.equal(result.created, false);
+    assert.equal(result.severity, "block");
+    assert.match(result.message, /simulated lock write failure/);
+    assert.equal(fs.existsSync(lockPath(tmpDir)), false);
+  } finally {
+    fs.writeFileSync = originalWriteFileSync;
+    syncBuiltinESMExports();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 

@@ -2,10 +2,25 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
+import { buildVaultGuardBegin, type VaultGuardBeginParams } from "../lib/lock.ts";
 import { buildVaultGuardStatus, type VaultGuardStatusResult } from "../lib/status.ts";
 
 const statusParameters = Type.Object({
   vaultRoot: Type.Optional(Type.String({ description: "Vault root; defaults to the current working directory" })),
+});
+
+const beginParameters = Type.Object({
+  vaultRoot: Type.Optional(Type.String()),
+  issueId: Type.Optional(Type.String()),
+  issueIdentifier: Type.Optional(Type.String()),
+  sessionId: Type.Optional(Type.String()),
+  purpose: Type.Optional(Type.String()),
+  owner: Type.Optional(Type.Object({
+    type: Type.String(),
+    id: Type.String(),
+    name: Type.Optional(Type.String()),
+  })),
+  allowExistingOwnedLock: Type.Optional(Type.Boolean()),
 });
 
 export default function (pi: ExtensionAPI) {
@@ -20,6 +35,30 @@ export default function (pi: ExtensionAPI) {
       }
 
       console.log(text);
+    },
+  });
+
+  pi.registerTool({
+    name: "vault_guard_begin",
+    label: "Vault Guard Begin",
+    description: "Preflight a vault and create a run-owned advisory lock marker",
+    promptSnippet: "vault_guard_begin: claim a vault mutation run before editing",
+    promptGuidelines: [
+      "Provide issue, session, purpose, and owner metadata before making guarded edits.",
+      "Never proceed when another active owner holds the lock.",
+    ],
+    parameters: beginParameters,
+    async execute(_toolCallId, params, signal) {
+      if (signal?.aborted) return { content: [{ type: "text", text: "Cancelled" }], details: {} };
+      const result = buildVaultGuardBegin(params as VaultGuardBeginParams);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
+    },
+    renderCall(_args, theme) {
+      return new Text(theme.fg("toolTitle", theme.bold("vault_guard_begin")), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const text = result.content[0]?.type === "text" ? result.content[0].text : "no result";
+      return new Text(theme.fg("text", expanded ? text : text.split("\n").find((line) => line.includes('"message"')) ?? text), 0, 0);
     },
   });
 

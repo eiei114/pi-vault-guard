@@ -2,6 +2,7 @@ import { cwd } from "node:process";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { readVaultGuardLock, type VaultGuardLockSummary } from "./lock.ts";
 
 export type VaultGuardSeverity = "ok" | "warn" | "block";
 export type DirtyPathKind =
@@ -38,6 +39,7 @@ export interface VaultGuardStatusResult {
   severity: VaultGuardSeverity;
   recommendedNextAction: string;
   message: string;
+  lock: VaultGuardLockSummary;
 }
 
 type GitCommandResult =
@@ -163,6 +165,7 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
       severity: "warn",
       recommendedNextAction: "Initialize or select a git-backed vault before making guarded edits.",
       message: "vault root is not a git repository",
+      lock: readVaultGuardLock(requestedRoot),
     };
   }
 
@@ -221,5 +224,6 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
       : dirtyPaths.length === 0 && counts.behind === 0
         ? "vault is clean"
         : "vault requires review",
+    lock: readVaultGuardLock(requestedRoot),
   };
 }
