@@ -54,9 +54,10 @@ test("extension module loads and registers vault-guard surfaces", () => {
   assert.match(commands[0].description, /vault guard status/i);
   assert.equal(typeof commands[0].handler, "function");
 
-  assert.equal(tools.length, 1);
-  assert.equal(tools[0].name, "vault_guard_status");
+  assert.equal(tools.length, 2);
+  assert.deepEqual(tools.map((tool) => tool.name), ["vault_guard_begin", "vault_guard_status"]);
   assert.equal(typeof tools[0].execute, "function");
+  assert.equal(typeof tools[1].execute, "function");
 });
 
 test("template includes npm release workflow handoff", () => {
