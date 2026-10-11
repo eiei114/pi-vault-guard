@@ -223,6 +223,7 @@ test("removes a newly created lock marker after a write failure", () => {
     assert.equal(result.severity, "block");
     assert.match(result.message, /simulated lock write failure/);
     assert.equal(fs.existsSync(lockPath(tmpDir)), false);
+    assert.equal(fs.existsSync(`${lockPath(tmpDir)}.begin`), false);
   } finally {
     fs.writeFileSync = originalWriteFileSync;
     syncBuiltinESMExports();

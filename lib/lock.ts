@@ -105,6 +105,28 @@ export function buildVaultGuardBegin(params: VaultGuardBeginParams): VaultGuardB
     return { status, lock, created: false, severity: "block", message: `cannot begin: missing metadata (${missing.join(", ")})` };
   }
 
+  // Serialize the entire read/remove/create transaction, including stale takeover.
+  // Never expire this guard: deleting another begin's guard recreates the ABA race.
+  const beginPath = `${lockPath(vaultRoot)}.begin`;
+  let beginFd: number;
+  try {
+    mkdirSync(join(vaultRoot, ".pi", "vault-guard"), { recursive: true });
+    beginFd = openSync(beginPath, "wx");
+  } catch (error) {
+    const lock = readVaultGuardLock(vaultRoot);
+    return { status, lock, created: false, severity: "block", message: `cannot begin: begin guard is busy or unavailable (${String(error)})` };
+  }
+  try {
+    return beginWithGuard(params, vaultRoot, status);
+  } finally {
+    // This descriptor/path belongs only to this invocation. Preserve the result
+    // on cleanup failure; a retained guard makes subsequent begin calls block.
+    try { closeSync(beginFd); } catch {}
+    try { unlinkSync(beginPath); } catch {}
+  }
+}
+
+function beginWithGuard(params: VaultGuardBeginParams, vaultRoot: string, status: VaultGuardStatusResult): VaultGuardBeginResult {
   const existing = readVaultGuardLock(vaultRoot);
   if (existing.state === "other" && existing.lock?.sessionId === params.sessionId) {
     if (params.allowExistingOwnedLock) {

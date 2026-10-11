@@ -25,6 +25,15 @@
 
 The advisory lock is stored at `.pi/vault-guard/lock.json`, which is ignored as local runtime state. Active locks owned by another session block begin; stale or malformed markers are reported without crashing. Begin metadata includes issue ID/identifier, session ID, purpose, and owner.
 
+Begin serializes read/stale takeover/exclusive creation with a transient
+`lock.json.begin` guard. Concurrent cooperating begin calls cannot remove a new
+owner's marker using an older stale snapshot. A busy/unavailable begin guard
+blocks without deleting either marker. The guard is never aged out automatically:
+after a crashed begin or cleanup failure, confirm that no begin writer is active
+before removing the retained guard. This is an advisory local-filesystem protocol,
+not protection against external programs deleting its files or older clients
+that do not follow the protocol. Status remains read-only.
+
 ## Local install / dogfood
 
 Load this package from your Obsidian vault checkout for dogfood:
