@@ -1,10 +1,12 @@
-name: Auto Release
+name: Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - package.json
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version to release (must match package.json)
+        required: true
+        type: string
 
 permissions:
   actions: write
@@ -13,6 +15,7 @@ permissions:
 jobs:
   release:
     name: Create release for new version
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,32 +23,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for version bump
+      - name: Validate requested version
         id: check
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          BEFORE="${{ github.event.before }}"
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           TAG="v${CURRENT_VERSION}"
-
-          if [ -z "$BEFORE" ] || printf '%s' "$BEFORE" | grep -Eq '^0+$'; then
-            echo "No previous commit is available; skipping auto release."
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! git cat-file -e "${BEFORE}:package.json" 2>/dev/null; then
-            echo "Previous package.json is not available; skipping auto release."
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          PREVIOUS_VERSION=$(git show "${BEFORE}:package.json" | node -e "let input=''; process.stdin.on('data', c => input += c); process.stdin.on('end', () => console.log(JSON.parse(input).version || ''));")
-
-          if [ "$CURRENT_VERSION" = "$PREVIOUS_VERSION" ]; then
-            echo "package.json version did not change (${CURRENT_VERSION}); skipping."
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$REQUESTED_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Requested version ${REQUESTED_VERSION} does not match package.json (${CURRENT_VERSION})." >&2
+            exit 1
           fi
 
           if git tag -l "$TAG" | grep -qx "$TAG"; then
@@ -54,7 +42,7 @@ jobs:
             exit 0
           fi
 
-          echo "Version bump detected: ${PREVIOUS_VERSION} -> ${CURRENT_VERSION}."
+          echo "Explicit release requested for version ${CURRENT_VERSION}."
           echo "released=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
