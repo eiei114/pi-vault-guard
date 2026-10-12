@@ -181,6 +181,14 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
   const { branch, upstream } = branchInfo;
   const counts = { ahead: branchInfo.ahead, behind: branchInfo.behind };
   const dirtyPaths = statusResult.ok ? parsePorcelainStatus(statusResult.value) : [];
+  const trackedDirtyPaths: string[] = [];
+  const untrackedPaths: string[] = [];
+  const suspiciousPaths: string[] = [];
+  for (const entry of dirtyPaths) {
+    if (entry.kind === "tracked") trackedDirtyPaths.push(entry.path);
+    if (entry.kind === "untracked") untrackedPaths.push(entry.path);
+    if (entry.suspicious) suspiciousPaths.push(entry.path);
+  }
 
   let recentUnpushedCommitSubjects: string[] = [];
   if (upstream) {
@@ -188,7 +196,6 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
     if (logResult.ok) recentUnpushedCommitSubjects = logResult.value.split(/\r?\n/).filter(Boolean);
     else gitErrors.push(`log: ${logResult.message}`);
   }
-  const suspiciousPaths = dirtyPaths.filter((entry) => entry.suspicious).map((entry) => entry.path);
   const severity: VaultGuardSeverity = gitErrors.length > 0
     ? "block"
     : branch === null || suspiciousPaths.length > 0 || counts.behind > 0
@@ -204,8 +211,8 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
     ...counts,
     dirty: !statusResult.ok || dirtyPaths.length > 0,
     dirtyPaths,
-    trackedDirtyPaths: dirtyPaths.filter((entry) => entry.kind === "tracked").map((entry) => entry.path),
-    untrackedPaths: dirtyPaths.filter((entry) => entry.kind === "untracked").map((entry) => entry.path),
+    trackedDirtyPaths,
+    untrackedPaths,
     suspiciousPaths,
     unpushedCommitCount: counts.ahead,
     recentUnpushedCommitSubjects,
