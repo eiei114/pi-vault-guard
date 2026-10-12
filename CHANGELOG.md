@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `vault_guard_finish` to verify run-owned lock and split-persist readiness before handoff.
+
 ## [0.0.1] - 2026-09-15
 
 ### Added

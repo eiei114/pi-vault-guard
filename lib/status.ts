@@ -183,10 +183,21 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
   const dirtyPaths = statusResult.ok ? parsePorcelainStatus(statusResult.value) : [];
 
   let recentUnpushedCommitSubjects: string[] = [];
+  let unpushedAutoBackupLookingCommit = false;
   if (upstream) {
     const logResult = git(resolvedRoot, ["log", "--format=%s", "-n", "5", "@{upstream}..HEAD"]);
     if (logResult.ok) recentUnpushedCommitSubjects = logResult.value.split(/\r?\n/).filter(Boolean);
     else gitErrors.push(`log: ${logResult.message}`);
+
+    if (counts.ahead > 0) {
+      const autoBackupResult = git(resolvedRoot, [
+        "log", "--format=%s", "--regexp-ignore-case", "--extended-regexp",
+        "--grep=obsidian[ -]?git", "--grep=auto[ -]?backup", "--grep=automatic[ -]?backup",
+        "@{upstream}..HEAD",
+      ]);
+      if (autoBackupResult.ok) unpushedAutoBackupLookingCommit = autoBackupResult.value.length > 0;
+      else gitErrors.push(`auto-backup log: ${autoBackupResult.message}`);
+    }
   }
   const suspiciousPaths = dirtyPaths.filter((entry) => entry.suspicious).map((entry) => entry.path);
   const severity: VaultGuardSeverity = gitErrors.length > 0
@@ -209,7 +220,7 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd()): VaultGuardStat
     suspiciousPaths,
     unpushedCommitCount: counts.ahead,
     recentUnpushedCommitSubjects,
-    likelyObsidianGitAutoBackup: autoBackupHeuristic(recentUnpushedCommitSubjects, suspiciousPaths),
+    likelyObsidianGitAutoBackup: unpushedAutoBackupLookingCommit || autoBackupHeuristic(recentUnpushedCommitSubjects, suspiciousPaths),
     gitErrors,
     severity,
     recommendedNextAction: gitErrors.length > 0
