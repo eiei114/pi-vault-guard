@@ -118,6 +118,25 @@ test("removeLock removes only the active lock owned by this session", () => {
   }
 });
 
+test("failed lock removal blocks finish and clears split-persist readiness", () => {
+  const vault = createVault();
+  try {
+    begin(vault.root);
+    fs.writeFileSync(`${lockPath(vault.root)}.begin`, "held by another operation");
+
+    const result = buildVaultGuardFinish({ vaultRoot: vault.root, sessionId: "session-1", removeLock: true });
+
+    assert.equal(result.blocked, true);
+    assert.equal(result.severity, "block");
+    assert.equal(result.splitPersistReady, false);
+    assert.equal(result.lockRemoved, false);
+    assert.match(result.blockers.join(" "), /unable to safely remove owned lock/);
+    assert.equal(JSON.parse(fs.readFileSync(lockPath(vault.root), "utf8")).sessionId, "session-1");
+  } finally {
+    cleanup(vault);
+  }
+});
+
 test("unpushed Obsidian Git auto-backup-looking commits warn", () => {
   const vault = createVault();
   try {

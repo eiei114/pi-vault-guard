@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `vault_guard_finish` to verify run-owned lock and split-persist readiness before handoff.
 
+### Changed
+
+- Require an explicit, version-confirmed manual release dispatch on `main` before creating a release or triggering npm publish.
+
 ## [0.0.1] - 2026-09-15
 
 ### Added

@@ -63,7 +63,14 @@ test("extension module loads and registers vault-guard surfaces", () => {
   assert.equal(tools[2].parameters.properties.removeLock.type, "boolean");
 });
 
-test("template includes npm release workflow handoff", () => {
+test("release workflow requires an explicit confirmed main-branch dispatch", () => {
+  assert.match(autoReleaseWorkflow, /on:\s*\n\s+workflow_dispatch:/);
+  assert.doesNotMatch(autoReleaseWorkflow, /on:\s*\n\s+push:/);
+  assert.match(autoReleaseWorkflow, /confirm_release:[\s\S]*?type:\s*boolean[\s\S]*?default:\s*false/);
+  assert.match(autoReleaseWorkflow, /if:\s*github\.ref == 'refs\/heads\/main' && inputs\.confirm_release/);
+  assert.match(autoReleaseWorkflow, /REQUESTED_VERSION:\s*\$\{\{ inputs\.version \}\}/);
+  assert.match(autoReleaseWorkflow, /CURRENT_VERSION" != "\$REQUESTED_VERSION/);
+  assert.doesNotMatch(publishWorkflow, /branches:\s*\[main\]/);
   assert.match(autoReleaseWorkflow, /actions:\s*write/);
   assert.match(autoReleaseWorkflow, /contents:\s*write/);
   assert.match(autoReleaseWorkflow, /gh workflow run publish\.yml/);

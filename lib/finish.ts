@@ -106,7 +106,7 @@ export function buildVaultGuardFinish(params: VaultGuardFinishParams): VaultGuar
   if (status.behind > 0) warnings.push(`current branch is behind its upstream by ${status.behind} commit(s)`);
   if (!status.upstream) warnings.push("current branch has no configured upstream");
 
-  const splitPersistReady = blockers.length === 0 && warnings.length === 0 &&
+  let splitPersistReady = blockers.length === 0 && warnings.length === 0 &&
     status.isGitRepository && status.gitErrors.length === 0 && status.branch !== null &&
     status.upstream !== null && status.behind === 0 && status.suspiciousPaths.length === 0 &&
     !status.likelyObsidianGitAutoBackup && lock.state === "owned";
@@ -116,7 +116,10 @@ export function buildVaultGuardFinish(params: VaultGuardFinishParams): VaultGuar
     const removal = removeOwnedLock(vaultRoot, params.sessionId);
     lock = forSession(removal.lock, params.sessionId);
     lockRemoved = removal.removed;
-    if (removal.error) blockers.push(removal.error);
+    if (removal.error) {
+      blockers.push(removal.error);
+      splitPersistReady = false;
+    }
   }
 
   status.lock = lock;
