@@ -1,6 +1,6 @@
 {
   "name": "pi-vault-guard",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Obsidian/git-backed vault mutation guard for Pi agents — status, begin, and finish gates",
   "type": "module",
   "license": "MIT",

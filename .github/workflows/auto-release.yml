@@ -1,12 +1,17 @@
-name: Release
+name: Manual Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Package version to release (must match package.json)
+        description: Exact package.json version approved for release
         required: true
         type: string
+      confirm_release:
+        description: Confirm creating a GitHub release and triggering npm publish
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   actions: write
@@ -14,8 +19,8 @@ permissions:
 
 jobs:
   release:
-    name: Create release for new version
-    if: github.ref == 'refs/heads/main'
+    name: Create approved release
+    if: github.ref == 'refs/heads/main' && inputs.confirm_release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate requested version
+      - name: Check approved release version
         id: check
         shell: bash
         env:
@@ -31,7 +36,8 @@ jobs:
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           TAG="v${CURRENT_VERSION}"
-          if [ "$REQUESTED_VERSION" != "$CURRENT_VERSION" ]; then
+
+          if [ "$CURRENT_VERSION" != "$REQUESTED_VERSION" ]; then
             echo "Requested version ${REQUESTED_VERSION} does not match package.json (${CURRENT_VERSION})." >&2
             exit 1
           fi
@@ -42,7 +48,7 @@ jobs:
             exit 0
           fi
 
-          echo "Explicit release requested for version ${CURRENT_VERSION}."
+          echo "Version ${CURRENT_VERSION} approved for release."
           echo "released=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 

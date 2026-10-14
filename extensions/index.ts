@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { formatStatusJson, formatStatusText } from "../lib/render-status.ts";
+import { buildVaultGuardFinish, type VaultGuardFinishParams, type VaultGuardFinishResult } from "../lib/finish.ts";
 import { buildVaultGuardBegin, type VaultGuardBeginParams } from "../lib/lock.ts";
 import { buildVaultGuardStatus, type VaultGuardStatusResult } from "../lib/status.ts";
 
@@ -21,6 +22,12 @@ const beginParameters = Type.Object({
     name: Type.Optional(Type.String()),
   })),
   allowExistingOwnedLock: Type.Optional(Type.Boolean()),
+});
+
+const finishParameters = Type.Object({
+  vaultRoot: Type.Optional(Type.String({ description: "Vault root; defaults to the current working directory" })),
+  sessionId: Type.String({ minLength: 1, description: "Session ID supplied to vault_guard_begin" }),
+  removeLock: Type.Optional(Type.Boolean({ description: "Remove this session's lock only when finish is not blocked" })),
 });
 
 export default function (pi: ExtensionAPI) {
@@ -106,6 +113,32 @@ export default function (pi: ExtensionAPI) {
         text += `\n${theme.fg("dim", formatStatusJson(status))}`;
       }
       return new Text(text, 0, 0);
+    },
+  });
+
+  pi.registerTool({
+    name: "vault_guard_finish",
+    label: "Vault Guard Finish",
+    description: "Re-check vault and run-owned lock readiness before split persistence; never persists changes itself",
+    promptSnippet: "vault_guard_finish: check split-persist readiness after guarded edits",
+    promptGuidelines: [
+      "Pass the same sessionId used by vault_guard_begin so finish can verify lock ownership.",
+      "Resolve blockers and review warnings before running the recommended persistence command.",
+      "This tool never commits, pushes, resets, stashes, or cleans the vault.",
+    ],
+    parameters: finishParameters,
+    async execute(_toolCallId, params, signal) {
+      if (signal?.aborted) return { content: [{ type: "text", text: "Cancelled" }], details: {} };
+      const result = buildVaultGuardFinish(params as VaultGuardFinishParams);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
+    },
+    renderCall(_args, theme) {
+      return new Text(theme.fg("toolTitle", theme.bold("vault_guard_finish")), 0, 0);
+    },
+    renderResult(result, { expanded }, theme) {
+      const details = result.details as VaultGuardFinishResult | undefined;
+      const text = result.content[0]?.type === "text" ? result.content[0].text : "no result";
+      return new Text(theme.fg(details?.blocked ? "error" : details?.severity === "warn" ? "warning" : "success", expanded ? text : details?.message ?? text), 0, 0);
     },
   });
 }

@@ -54,13 +54,23 @@ test("extension module loads and registers vault-guard surfaces", () => {
   assert.match(commands[0].description, /vault guard status/i);
   assert.equal(typeof commands[0].handler, "function");
 
-  assert.equal(tools.length, 2);
-  assert.deepEqual(tools.map((tool) => tool.name), ["vault_guard_begin", "vault_guard_status"]);
+  assert.equal(tools.length, 3);
+  assert.deepEqual(tools.map((tool) => tool.name), ["vault_guard_begin", "vault_guard_status", "vault_guard_finish"]);
   assert.equal(typeof tools[0].execute, "function");
   assert.equal(typeof tools[1].execute, "function");
+  assert.equal(typeof tools[2].execute, "function");
+  assert.equal(tools[2].parameters.properties.sessionId.type, "string");
+  assert.equal(tools[2].parameters.properties.removeLock.type, "boolean");
 });
 
-test("template includes npm release workflow handoff", () => {
+test("release workflow requires an explicit confirmed main-branch dispatch", () => {
+  assert.match(autoReleaseWorkflow, /on:\s*\n\s+workflow_dispatch:/);
+  assert.doesNotMatch(autoReleaseWorkflow, /on:\s*\n\s+push:/);
+  assert.match(autoReleaseWorkflow, /confirm_release:[\s\S]*?type:\s*boolean[\s\S]*?default:\s*false/);
+  assert.match(autoReleaseWorkflow, /if:\s*github\.ref == 'refs\/heads\/main' && inputs\.confirm_release/);
+  assert.match(autoReleaseWorkflow, /REQUESTED_VERSION:\s*\$\{\{ inputs\.version \}\}/);
+  assert.match(autoReleaseWorkflow, /CURRENT_VERSION" != "\$REQUESTED_VERSION/);
+  assert.doesNotMatch(publishWorkflow, /branches:\s*\[main\]/);
   assert.match(autoReleaseWorkflow, /actions:\s*write/);
   assert.match(autoReleaseWorkflow, /contents:\s*write/);
   assert.match(autoReleaseWorkflow, /gh workflow run publish\.yml/);

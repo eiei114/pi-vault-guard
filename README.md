@@ -22,6 +22,7 @@
 |---|---|
 | `vault_guard_status` | Return structured JSON with vault and lock state |
 | `vault_guard_begin` | Preflight and create a run-owned lock marker |
+| `vault_guard_finish` | Re-check run-owned lock and split-persist readiness |
 
 The advisory lock is stored at `.pi/vault-guard/lock.json`, which is ignored as local runtime state. Active locks owned by another session block begin; stale or malformed markers are reported without crashing. Begin metadata includes issue ID/identifier, session ID, purpose, and owner.
 
@@ -33,6 +34,12 @@ after a crashed begin or cleanup failure, confirm that no begin writer is active
 before removing the retained guard. This is an advisory local-filesystem protocol,
 not protection against external programs deleting its files or older clients
 that do not follow the protocol. Status remains read-only.
+
+After guarded edits, `vault_guard_finish` checks that the supplied session still
+owns the lock, re-runs vault status, and reports whether split persistence is
+ready. It only removes that session's lock when `removeLock: true` and finish
+is not blocked. The recommended `vault-split-commit.py --apply --push` command
+is reported for handoff but is never run by the tool.
 
 ## Local install / dogfood
 
