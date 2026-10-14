@@ -1,4 +1,5 @@
 import type { VaultGuardStatusResult } from "./status.ts";
+import { escapePathForDisplay } from "./path-display.ts";
 
 /**
  * Human-readable status text shared by `/vault-guard:status` and tool renderers.
@@ -14,7 +15,7 @@ export function formatStatusText(status: VaultGuardStatusResult): string {
     `  ahead/behind: ${status.ahead}/${status.behind}`,
     `  risky paths: ${status.suspiciousDirtyPaths.length}`,
     ...status.suspiciousDirtyPaths.slice(0, 3).map(({ path, reasonCodes, reasons, tracking }) =>
-      `    ${path} [${reasonCodes.join(", ")}; ${tracking}] — ${reasons.join("; ")}`,
+      `    ${escapePathForDisplay(path)} [${reasonCodes.join(", ")}; ${tracking}] — ${reasons.join("; ")}`,
     ),
     ...(status.suspiciousDirtyPaths.length > 3
       ? [`    …and ${status.suspiciousDirtyPaths.length - 3} more`]

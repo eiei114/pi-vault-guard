@@ -7,6 +7,7 @@ import {
   removeVaultGuardLock,
   type VaultGuardLockSummary,
 } from "./lock.ts";
+import { formatSuspiciousDirtyPathWarning } from "./path-display.ts";
 import { buildVaultGuardStatus, type VaultGuardStatusResult } from "./status.ts";
 
 const SPLIT_PERSIST_COMMAND = "python vault-split-commit.py --apply --push";
@@ -96,11 +97,8 @@ export function buildVaultGuardFinish(params: VaultGuardFinishParams): VaultGuar
     }
   }
 
-  if (status.suspiciousPaths.length > 0) {
-    warnings.push(`suspicious dirty paths require review: ${status.suspiciousDirtyPaths
-      .map(({ path, reasonCodes, tracking }) => `${path} (${reasonCodes.join("/")}; ${tracking})`)
-      .join(", ")}`);
-  }
+  const suspiciousPathWarning = formatSuspiciousDirtyPathWarning(status.suspiciousDirtyPaths);
+  if (suspiciousPathWarning) warnings.push(suspiciousPathWarning);
   if (status.likelyObsidianGitAutoBackup) {
     warnings.push("unpushed commits match an Obsidian Git auto-backup heuristic; verify before acting");
   }

@@ -39,6 +39,33 @@ test("parses NUL-delimited paths and uses the destination path for renames", () 
   ]);
 });
 
+test("status text escapes control characters in paths while preserving structured paths", () => {
+  const rawPath = "exports/report\n  severity: ok\u001b[2J.csv";
+  const [dirtyPath] = parsePorcelainStatus(` M ${rawPath}\0`);
+  const status = {
+    vaultRoot: "/vault",
+    guardVersion: "0.2.0",
+    isGitRepository: true,
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 0,
+    behind: 0,
+    suspiciousDirtyPaths: [dirtyPath],
+    unpushedCommitCount: 0,
+    likelyObsidianGitAutoBackup: false,
+    gitErrors: [],
+    recommendedNextAction: "review",
+    message: "requires review",
+  };
+
+  assert.equal(dirtyPath.path, rawPath);
+  const text = formatStatusText(status);
+  assert.ok(text.includes("exports/report\\u{000a}  severity: ok\\u{001b}[2J.csv [export-file; tracked]"));
+  assert.equal(text.includes("\u001b"), false);
+  assert.equal(text.includes(rawPath), false);
+  assert.equal(JSON.parse(formatStatusJson(status)).suspiciousDirtyPaths[0].path, rawPath);
+});
+
 test("assigns distinct reason codes to runtime, export, generated, and ordinary paths", () => {
   const paths = parsePorcelainStatus([
     " M .pi/cache/session.json",
