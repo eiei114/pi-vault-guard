@@ -97,10 +97,12 @@ export function buildVaultGuardFinish(params: VaultGuardFinishParams): VaultGuar
   }
 
   if (status.suspiciousPaths.length > 0) {
-    warnings.push(`suspicious dirty paths require review: ${status.suspiciousPaths.join(", ")}`);
+    warnings.push(`suspicious dirty paths require review: ${status.suspiciousDirtyPaths
+      .map(({ path, reasonCodes, tracking }) => `${path} (${reasonCodes.join("/")}; ${tracking})`)
+      .join(", ")}`);
   }
   if (status.likelyObsidianGitAutoBackup) {
-    warnings.push("unpushed commits or suspicious paths look like Obsidian Git auto-backup state");
+    warnings.push("unpushed commits match an Obsidian Git auto-backup heuristic; verify before acting");
   }
   if (status.branch === null) warnings.push("no current branch is available for split persistence");
   if (status.behind > 0) warnings.push(`current branch is behind its upstream by ${status.behind} commit(s)`);

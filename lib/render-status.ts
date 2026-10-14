@@ -4,7 +4,7 @@ import type { VaultGuardStatusResult } from "./status.ts";
  * Human-readable status text shared by `/vault-guard:status` and tool renderers.
  */
 export function formatStatusText(status: VaultGuardStatusResult): string {
-  return [
+  const lines = [
     "Vault Guard status",
     `  vault root: ${status.vaultRoot}`,
     `  guard version: ${status.guardVersion}`,
@@ -12,14 +12,26 @@ export function formatStatusText(status: VaultGuardStatusResult): string {
     `  branch: ${status.isGitRepository ? status.branch ?? "(detached)" : "(not a git repository)"}`,
     `  upstream: ${status.upstream ?? "(none)"}`,
     `  ahead/behind: ${status.ahead}/${status.behind}`,
-    `  dirty paths: ${status.dirtyPaths.length}`,
-    `  suspicious paths: ${status.suspiciousPaths.length}`,
+    `  risky paths: ${status.suspiciousDirtyPaths.length}`,
+    ...status.suspiciousDirtyPaths.slice(0, 3).map(({ path, reasonCodes, reasons, tracking }) =>
+      `    ${path} [${reasonCodes.join(", ")}; ${tracking}] — ${reasons.join("; ")}`,
+    ),
+    ...(status.suspiciousDirtyPaths.length > 3
+      ? [`    …and ${status.suspiciousDirtyPaths.length - 3} more`]
+      : []),
     `  unpushed commits: ${status.unpushedCommitCount}`,
-    `  likely Obsidian Git auto-backup: ${status.likelyObsidianGitAutoBackup}`,
-    `  git errors: ${status.gitErrors.length > 0 ? status.gitErrors.join("; ") : "(none)"}`,
+    ...(status.likelyObsidianGitAutoBackup
+      ? [
+          "  possible Obsidian Git auto-backup: heuristic match; verify before acting",
+          `  signals: ${status.obsidianGitAutoBackupSignals.join("; ")}`,
+          "  config guidance (dry-run): review plugin settings yourself; no config was changed",
+        ]
+      : []),
+    ...(status.gitErrors.length > 0 ? [`  git errors: ${status.gitErrors.join("; ")}`] : []),
     `  next action: ${status.recommendedNextAction}`,
     `  message: ${status.message}`,
-  ].join("\n");
+  ];
+  return lines.join("\n");
 }
 
 /**

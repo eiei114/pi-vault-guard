@@ -61,6 +61,9 @@ test("extension module loads and registers vault-guard surfaces", () => {
   assert.equal(typeof tools[2].execute, "function");
   assert.equal(tools[2].parameters.properties.sessionId.type, "string");
   assert.equal(tools[2].parameters.properties.removeLock.type, "boolean");
+  assert.equal(tools[1].parameters.properties.autoBackupSubjectPatterns.type, "array");
+  assert.equal(tools[1].parameters.properties.autoBackupTimestampWindowMinutes.minimum, 5);
+  assert.equal(tools[1].parameters.properties.autoBackupTimestampWindowMinutes.maximum, 120);
 });
 
 test("release workflow requires an explicit confirmed main-branch dispatch", () => {

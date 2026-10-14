@@ -67,7 +67,8 @@ test("suspicious dirty paths warn and prevent split-persist readiness", () => {
     assert.equal(result.blocked, false);
     assert.equal(result.severity, "warn");
     assert.equal(result.splitPersistReady, false);
-    assert.match(result.warnings.join(" "), /exports\//);
+    assert.match(result.warnings.join(" "), /exports\/report\.csv \(export-file\/generated-report\/untracked; untracked\)/);
+    assert.doesNotMatch(result.warnings.join(" "), /auto-backup heuristic/);
     assert.equal(result.lockRemoved, true);
     assert.equal(fs.existsSync(lockPath(vault.root)), false);
   } finally {
@@ -148,7 +149,7 @@ test("unpushed Obsidian Git auto-backup-looking commits warn", () => {
     const result = buildVaultGuardFinish({ vaultRoot: vault.root, sessionId: "session-1" });
     assert.equal(result.blocked, false);
     assert.equal(result.splitPersistReady, false);
-    assert.match(result.warnings.join(" "), /auto-backup state/);
+    assert.match(result.warnings.join(" "), /auto-backup heuristic; verify before acting/);
     assert.equal(result.lock.state, "owned");
   } finally {
     cleanup(vault);

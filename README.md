@@ -41,6 +41,30 @@ ready. It only removes that session's lock when `removeLock: true` and finish
 is not blocked. The recommended `vault-split-commit.py --apply --push` command
 is reported for handoff but is never run by the tool.
 
+## Status warnings and Obsidian Git
+
+Status output calls out dirty `.pi/settings.json`, other `.pi/` runtime state,
+untracked files, export-like files, generated calendars/reports, and tracked
+files that match `.gitignore`. Each risky path includes reason codes and whether
+Git considers it tracked or untracked. These are review prompts, not proof that
+a file is unrelated; inspect false positives and include only intended vault
+changes in persistence.
+
+Possible Obsidian Git auto-backups are identified heuristically from
+configurable literal commit-subject markers. Safe defaults include
+`Obsidian Git`, `auto backup`, and `vault backup`, plus a cluster of three unpushed commits
+within a configurable timestamp window. The status tool accepts additional
+`autoBackupSubjectPatterns` and an `autoBackupTimestampWindowMinutes` value
+(5–120 minutes); patterns are literal substrings, not regular expressions.
+Matching only indicates a possibility and does not establish which plugin
+created a commit. Review the commit subjects and timestamps before acting.
+
+When these signals appear, status provides dry-run guidance to review the
+Obsidian Git backup interval and commit-message template. Vault Guard does not
+read, edit, or otherwise change Obsidian Git plugin configuration. It also does
+not decide whether to commit/push, clean or discard files, or override plugin
+settings; those remain explicit maintainer decisions.
+
 ## Local install / dogfood
 
 Load this package from your Obsidian vault checkout for dogfood:
