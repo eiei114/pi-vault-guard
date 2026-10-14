@@ -28,6 +28,17 @@ test("parses porcelain paths and classifies risky files", () => {
   assert.equal(paths[1].suspicious, true);
 });
 
+test("parses NUL-delimited paths and uses the destination path for renames", () => {
+  const paths = parsePorcelainStatus(
+    "## main...origin/main\0R  café/new note.txt\0old note.txt\0 M notes.md\0",
+    new Set(["café/new note.txt"]),
+  );
+  assert.deepEqual(paths.map(({ path, status, reasonCodes }) => ({ path, status, reasonCodes })), [
+    { path: "café/new note.txt", status: "R ", reasonCodes: ["ignored-tracked"] },
+    { path: "notes.md", status: " M", reasonCodes: ["tracked-file"] },
+  ]);
+});
+
 test("assigns distinct reason codes to runtime, export, generated, and ordinary paths", () => {
   const paths = parsePorcelainStatus([
     " M .pi/cache/session.json",
@@ -71,6 +82,60 @@ test("marks ignored-but-tracked dirty paths without confusing them with untracke
   }
 });
 
+test("detects ignored tracked non-ASCII paths with core.quotePath enabled", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-ignored-tracked-unicode-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  const unicodeDir = path.join(tmpDir, "café");
+  fs.mkdirSync(unicodeDir);
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  git(["config", "core.quotePath", "true"]);
+  fs.writeFileSync(path.join(unicodeDir, "note.txt"), "initial\n");
+  fs.writeFileSync(path.join(tmpDir, ".gitignore"), "café/note.txt\n");
+  git(["add", ".gitignore"]);
+  git(["add", "-f", "café/note.txt"]);
+  git(["commit", "-q", "-m", "initial"]);
+  fs.writeFileSync(path.join(unicodeDir, "note.txt"), "updated\n");
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    const ignored = status.suspiciousDirtyPaths.find(({ path: dirtyPath }) => dirtyPath === "café/note.txt");
+    assert.ok(ignored);
+    assert.equal(ignored.tracking, "tracked");
+    assert.ok(ignored.reasonCodes.includes("ignored-tracked"));
+    assert.ok(status.gitErrors.every((error) => !error.startsWith("check-ignore:")));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("checks the destination of a NUL-delimited rename for ignored tracking", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-ignored-rename-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  fs.mkdirSync(path.join(tmpDir, "café"));
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  git(["config", "core.quotePath", "true"]);
+  fs.writeFileSync(path.join(tmpDir, "old.txt"), "same content\n");
+  fs.writeFileSync(path.join(tmpDir, ".gitignore"), "café/new.txt\n");
+  git(["add", ".gitignore", "old.txt"]);
+  git(["commit", "-q", "-m", "initial"]);
+  git(["mv", "-f", "old.txt", "café/new.txt"]);
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    const renamed = status.dirtyPaths.find(({ path: dirtyPath }) => dirtyPath === "café/new.txt");
+    assert.ok(renamed);
+    assert.equal(renamed.tracking, "tracked");
+    assert.ok(renamed.reasonCodes.includes("ignored-tracked"));
+    assert.equal(status.dirtyPaths.some(({ path: dirtyPath }) => dirtyPath === "old.txt"), false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("parses ahead and behind counts", () => {
   assert.deepEqual(parseAheadBehind("3\t2"), { ahead: 3, behind: 2 });
   assert.deepEqual(parseAheadBehind(null), { ahead: 0, behind: 0 });
@@ -100,6 +165,12 @@ test("parses branch metadata from porcelain status headers", () => {
     upstream: null,
     ahead: 0,
     behind: 0,
+  });
+  assert.deepEqual(parsePorcelainBranch("## main...origin/main [ahead 3, behind 2]\0 M notes.md\0"), {
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 3,
+    behind: 2,
   });
 });
 

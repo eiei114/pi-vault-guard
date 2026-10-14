@@ -110,15 +110,13 @@ function git(root: string, args: string[], input?: string): GitCommandResult {
     const env = Object.fromEntries(
       Object.entries(process.env).filter(([key]) => !["GIT_DIR", "GIT_WORK_TREE"].includes(key.toUpperCase())),
     );
-    return {
-      ok: true,
-      value: execFileSync("git", ["-C", root, ...args], {
-        encoding: "utf8",
-        env,
-        stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
-        input,
-      }).trimEnd(),
-    };
+    const output = execFileSync("git", ["-C", root, ...args], {
+      encoding: "utf8",
+      env,
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      input,
+    });
+    return { ok: true, value: args.includes("-z") ? output : output.trimEnd() };
   } catch (error) {
     const exitCode = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
       ? error.status
@@ -130,13 +128,24 @@ function git(root: string, args: string[], input?: string): GitCommandResult {
 /** Parse porcelain v1 output without treating its two-character status as a path. */
 export function parsePorcelainStatus(output: string, ignoredTrackedPaths: ReadonlySet<string> = new Set()): DirtyPath[] {
   const paths: DirtyPath[] = [];
-  for (const line of output.split(/\r?\n/)) {
-    if (!line || line.startsWith("## ")) continue;
-    const status = line.slice(0, 2);
-    // For renames porcelain prints "old -> new"; the new path is the useful one.
-    const rawPath = line.slice(3).trim();
-    const renameSeparator = rawPath.lastIndexOf(" -> ");
-    const path = renameSeparator >= 0 ? rawPath.slice(renameSeparator + 4) : rawPath;
+  const nulDelimited = output.includes("\0");
+  const records = nulDelimited ? output.split("\0") : output.split(/\r?\n/);
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record || record.startsWith("## ")) continue;
+    const status = record.slice(0, 2);
+    let path: string;
+    if (nulDelimited) {
+      path = record.slice(3);
+      // In -z mode Git emits the destination first and the source in the next
+      // NUL-delimited record. Classify only the destination path.
+      if (status.includes("R") || status.includes("C")) index += 1;
+    } else {
+      // In quoted, line-oriented porcelain, renames use "old -> new".
+      const rawPath = record.slice(3).trim();
+      const renameSeparator = rawPath.lastIndexOf(" -> ");
+      path = renameSeparator >= 0 ? rawPath.slice(renameSeparator + 4) : rawPath;
+    }
     const kind = classifyDirtyPath(path, status);
     const tracking = status === "??" ? "untracked" : "tracked";
     const reasonCodes = dirtyPathReasonCodes(path, tracking, ignoredTrackedPaths.has(path));
@@ -165,7 +174,7 @@ export function parsePorcelainBranch(output: string): {
   ahead: number;
   behind: number;
 } {
-  const header = output.split(/\r?\n/, 1)[0];
+  const header = output.split(/\0|\r?\n/, 1)[0];
   const headerDetails = header.startsWith("## ") ? header.slice(3) : "";
   const details = headerDetails.startsWith("No commits yet on ")
     ? headerDetails.slice("No commits yet on ".length)
@@ -327,7 +336,7 @@ export function buildVaultGuardStatus(vaultRoot: string = cwd(), options: VaultG
   const gitErrors: string[] = [];
   // Porcelain branch headers include branch, upstream, and ahead/behind counts.
   // Reading them with status avoids three additional Git process launches.
-  const statusResult = git(requestedRoot, ["status", "--porcelain=v1", "--branch", "--untracked-files=all", "--", "."]);
+  const statusResult = git(requestedRoot, ["status", "--porcelain=v1", "--branch", "--untracked-files=all", "-z", "--", "."]);
   if (!statusResult.ok) gitErrors.push(`status: ${statusResult.message}`);
   const branchInfo = statusResult.ok
     ? parsePorcelainBranch(statusResult.value)

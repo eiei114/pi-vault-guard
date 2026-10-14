@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Require an explicit, version-confirmed manual release dispatch on `main` before creating a release or triggering npm publish.
 
+### Fixed
+
+- Parse NUL-delimited Git status paths so ignored tracked files with non-ASCII names and rename destinations are classified correctly.
+
 ## [0.1.1] - 2026-10-16
 
 ### Changed
