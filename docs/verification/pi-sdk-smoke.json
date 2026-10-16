@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "verification_contract": "pi-sdk-behavior-v2",
+  "sdk_versions": {
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
+  },
+  "platform": "win32",
+  "model_inference": "none; actual Pi RPC host executes the package's status command; tool behavior is covered by the real SDK session regression",
+  "unhandled_errors": 0,
+  "extension_load_errors": 0,
+  "cases": [
+    {
+      "name": "extension_load",
+      "command": "npm run smoke:pi",
+      "deadline_ms": 15000,
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "{\"id\":\"commands\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"vault-guard:status\",\"description\":\"Show Vault Guard status from read-only git analysis\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<checkout>\\\\extensions\\\\index.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n",
+      "assertions": [
+        {
+          "id": "extension_registered",
+          "expected": "The actual Pi host lists vault-guard:status as a registered extension command",
+          "observed": "{\"response\":{\"success\":true,\"command\":\"get_commands\"},\"command\":{\"name\":\"vault-guard:status\",\"source\":\"extension\"}}",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "happy_path",
+      "command": "npm run smoke:pi",
+      "deadline_ms": 15000,
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "{\"type\":\"extension_ui_request\",\"id\":\"3da95bd1-b3eb-45a7-96af-42de177fa3fd\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"}\n{\"id\":\"commands\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"vault-guard:status\",\"description\":\"Show Vault Guard status from read-only git analysis\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<checkout>\\\\extensions\\\\index.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\nVault Guard status\n  vault root: <smoke-temp>\\vault\n  guard version: 0.1.1\n  severity: ok\n  branch: main\n  upstream: (none)\n  ahead/behind: 0/0\n  dirty paths: 0\n  suspicious paths: 0\n  unpushed commits: 0\n  likely Obsidian Git auto-backup: false\n  git errors: (none)\n  next action: Vault is ready for guarded edits.\n  message: vault is clean\n",
+      "assertions": [
+        {
+          "id": "feature_response",
+          "expected": "The actual Pi host handles /vault-guard:status and reports the clean git vault",
+          "observed": "{\"prompt\":{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}},\"notification\":{\"type\":\"extension_ui_request\",\"id\":\"3da95bd1-b3eb-45a7-96af-42de177fa3fd\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"},\"statusLines\":[\"Vault Guard status\",\"  vault root: <fixture>\",\"  severity: ok\",\"  branch: main\",\"  message: vault is clean\"],\"passed\":true}",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "error_path",
+      "command": "npm run smoke:pi",
+      "deadline_ms": 15000,
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "{\"type\":\"extension_ui_request\",\"id\":\"95bc377f-c014-4189-8129-a299c83f6403\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"}\n{\"type\":\"response\",\"command\":\"parse\",\"success\":false,\"error\":\"Failed to parse command: Unexpected token 'o', \\\"not-json\\\" is not valid JSON\"}\n{\"id\":\"commands\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"vault-guard:status\",\"description\":\"Show Vault Guard status from read-only git analysis\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<checkout>\\\\extensions\\\\index.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\nVault Guard status\n  vault root: <smoke-temp>\\not-a-vault\n  guard version: 0.1.1\n  severity: warn\n  branch: (not a git repository)\n  upstream: (none)\n  ahead/behind: 0/0\n  dirty paths: 0\n  suspicious paths: 0\n  unpushed commits: 0\n  likely Obsidian Git auto-backup: false\n  git errors: (none)\n  next action: Initialize or select a git-backed vault before making guarded edits.\n  message: vault root is not a git repository\n",
+      "assertions": [
+        {
+          "id": "handled_error",
+          "expected": "A non-git vault returns a handled warning and malformed RPC input returns an explicit parse failure",
+          "observed": "{\"feature\":{\"prompt\":{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}},\"notification\":{\"type\":\"extension_ui_request\",\"id\":\"95bc377f-c014-4189-8129-a299c83f6403\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"},\"statusLines\":[\"Vault Guard status\",\"  vault root: <fixture>\",\"  severity: warn\",\"  branch: (not a git repository)\",\"  message: vault root is not a git repository\"],\"passed\":true},\"parseError\":{\"type\":\"response\",\"command\":\"parse\",\"success\":false,\"error\":\"Failed to parse command: Unexpected token 'o', \\\"not-json\\\" is not valid JSON\"}}",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "reload_cleanup",
+      "command": "npm run smoke:pi",
+      "deadline_ms": 15000,
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "{\"id\":\"commands\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"vault-guard:status\",\"description\":\"Show Vault Guard status from read-only git analysis\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<checkout>\\\\extensions\\\\index.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n\n--- second Pi process ---\n{\"type\":\"extension_ui_request\",\"id\":\"d09e103b-1da9-449b-8219-3387e95328e9\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"}\n{\"id\":\"commands\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"vault-guard:status\",\"description\":\"Show Vault Guard status from read-only git analysis\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<checkout>\\\\extensions\\\\index.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\nVault Guard status\n  vault root: <smoke-temp>\\vault\n  guard version: 0.1.1\n  severity: ok\n  branch: main\n  upstream: (none)\n  ahead/behind: 0/0\n  dirty paths: 0\n  suspicious paths: 0\n  unpushed commits: 0\n  likely Obsidian Git auto-backup: false\n  git errors: (none)\n  next action: Vault is ready for guarded edits.\n  message: vault is clean\n",
+      "assertions": [
+        {
+          "id": "reloaded_extension_registered",
+          "expected": "A second actual Pi process registers vault-guard:status after the first process exits",
+          "observed": "{\"response\":{\"success\":true,\"command\":\"get_commands\"},\"command\":{\"name\":\"vault-guard:status\",\"source\":\"extension\"}}",
+          "passed": true
+        },
+        {
+          "id": "reloaded_feature_response",
+          "expected": "The second Pi process handles the status command and returns the clean-vault response",
+          "observed": "{\"prompt\":{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}},\"notification\":{\"type\":\"extension_ui_request\",\"id\":\"d09e103b-1da9-449b-8219-3387e95328e9\",\"method\":\"notify\",\"message\":\"Vault Guard status collected\",\"notifyType\":\"info\"},\"statusLines\":[\"Vault Guard status\",\"  vault root: <fixture>\",\"  severity: ok\",\"  branch: main\",\"  message: vault is clean\"],\"passed\":true}",
+          "passed": true
+        },
+        {
+          "id": "clean_shutdown",
+          "expected": "Both Pi processes exit zero without unhandled or shutdown errors after stdin closes",
+          "observed": "{\"first_exit_code\":0,\"second_exit_code\":0,\"first_errors\":false,\"second_errors\":false}",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "host_shell",
+      "command": "npm run smoke:pi",
+      "deadline_ms": 15000,
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "1.2.0\n",
+      "assertions": [
+        {
+          "id": "native_shell_boundary",
+          "expected": "The native host shell launches the locally pinned Pi CLI and returns its exact version",
+          "observed": "{\"exit_code\":0,\"output\":\"1.2.0\",\"expectedVersion\":\"1.2.0\"}",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Require an explicit, version-confirmed manual release dispatch on `main` before creating a release or triggering npm publish.
 
+## [0.1.1] - 2026-10-16
+
+### Changed
+
+- Pin Pi SDK development and test dependencies to 1.2.0 while preserving public peer ranges.
+
 ## [0.0.3] - 2026-10-13
 
 ### Changed
