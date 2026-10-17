@@ -24,7 +24,7 @@ export function formatStatusText(status: VaultGuardStatusResult): string {
     ...(status.likelyObsidianGitAutoBackup
       ? [
           "  possible Obsidian Git auto-backup: heuristic match; verify before acting",
-          `  signals: ${status.obsidianGitAutoBackupSignals.join("; ")}`,
+          `  signals: ${status.obsidianGitAutoBackupSignals.map(escapePathForDisplay).join("; ")}`,
           "  config guidance (dry-run): review plugin settings yourself; no config was changed",
         ]
       : []),

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Escape control characters from Obsidian Git commit subjects in status output.
 - Parse NUL-delimited Git status paths so ignored tracked files with non-ASCII names and rename destinations are classified correctly.
 
 ## [0.1.1] - 2026-10-16

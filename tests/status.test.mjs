@@ -284,6 +284,40 @@ test("configurable literal backup markers and unpushed timestamp clusters are he
   }
 });
 
+test("status text escapes control characters in matching backup commit subjects", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-controls-"));
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-controls-remote-"));
+  const git = (root, args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  git(remoteDir, ["init", "--bare", "-q"]);
+  git(tmpDir, ["init", "-q"]);
+  git(tmpDir, ["config", "user.name", "Vault Guard Test"]);
+  git(tmpDir, ["config", "user.email", "vault-guard@example.invalid"]);
+  git(tmpDir, ["branch", "-M", "main"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "initial\n");
+  git(tmpDir, ["add", "."]);
+  git(tmpDir, ["commit", "-q", "-m", "initial"]);
+  git(tmpDir, ["remote", "add", "origin", remoteDir]);
+  git(tmpDir, ["push", "-q", "-u", "origin", "main"]);
+
+  try {
+    const subject = "Obsidian Git backup\u001b[2J\r severity: ok";
+    fs.writeFileSync(path.join(tmpDir, "notes.md"), "updated\n");
+    git(tmpDir, ["commit", "-q", "-am", subject]);
+
+    const status = buildVaultGuardStatus(tmpDir);
+    assert.equal(status.likelyObsidianGitAutoBackup, true);
+    assert.ok(status.obsidianGitAutoBackupSignals[0].includes("\u001b"));
+    assert.ok(status.obsidianGitAutoBackupSignals[0].includes("\r"));
+    const text = formatStatusText(status);
+    assert.ok(text.includes("Obsidian Git backup\\u{001b}[2J\\u{000d} severity: ok"));
+    assert.equal(text.includes("\u001b"), false);
+    assert.equal(text.includes("\r"), false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+  }
+});
+
 test("detached repositories warn before guarded edits", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-detached-"));
   const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
