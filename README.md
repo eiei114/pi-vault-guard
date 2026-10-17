@@ -69,7 +69,7 @@ Possible Obsidian Git signals include dry-run suggestions to review the plugin's
 
 ## Safety and limitations
 
-- Status only reads Git state. Begin writes an advisory lock at `.pi/vault-guard/lock.json`; finish removes it only when asked and after verifying ownership. Add `.pi/vault-guard/` to the vault's `.gitignore` if it is not already ignored.
+- Status is read-only and reads Git state plus the Vault Guard lock marker. Begin writes an advisory lock at `.pi/vault-guard/lock.json`; finish removes it only when asked and after verifying ownership. Add `.pi/vault-guard/` to the vault's `.gitignore` if it is not already ignored.
 - The lock is local filesystem coordination for cooperating runs, not a distributed lock or protection from other programs that ignore it. Inspect a stale or malformed marker before taking action; a stale marker may be replaced by begin.
 - The package never commits, pushes, fetches, resets, stashes, cleans, checks out branches, deletes vault content, or edits Obsidian/plugin settings. Warnings and heuristic matches can have false positives and require human review.
 - Status uses the local Git checkout and existing upstream-tracking information; it does not fetch to refresh remote state.
