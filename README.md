@@ -4,100 +4,86 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Pi package](https://img.shields.io/badge/pi-package-purple.svg)](https://pi.dev/packages)
 
-> Obsidian / git-backed vault mutation guard for Pi agents — warning-first status, begin, and finish gates.
+> A warning-first mutation guard for Pi agents working in Obsidian vaults backed by Git.
 
-## What this is
+## Install
 
-`pi-vault-guard` helps Pi and Multica agents inspect vault safety before and after editing an Obsidian vault backed by git. Status analysis is read-only; begin creates an advisory, run-owned lock marker.
+After a maintainer publishes the package, install it in Pi with:
 
-## Commands
+```sh
+pi install npm:pi-vault-guard
+```
 
-| Command | Description |
+For local dogfooding, load the extension directly from a checkout without changing vault settings:
+
+```sh
+pi -e /absolute/path/to/pi-vault-guard/extensions/index.ts
+```
+
+Alternatively, `pi install /absolute/path/to/pi-vault-guard -l` installs the local package into the current project's `.pi/settings.json`. Review that file first; do not overwrite or discard existing settings. Restart Pi after changing installed packages.
+
+## Use
+
+Run `/vault-guard:status` in a vault to print its current status. An optional path argument selects another vault. Status collection is read-only.
+
+The extension also registers these tools for agents:
+
+| Tool | Purpose |
 |---|---|
-| `/vault-guard:status` | Print a readable vault guard status (no arguments) |
+| `vault_guard_status` | Return branch, dirty-path, unpushed-commit, warning, and lock details without modifying the vault. |
+| `vault_guard_begin` | Re-check the vault and create a run-owned advisory lock marker. |
+| `vault_guard_finish` | Verify the same run still owns its lock and report split-persistence readiness. |
 
-## Tools
+Example tool arguments (use the same `vaultRoot` and `sessionId` throughout a run):
 
-| Tool | Description |
-|---|---|
-| `vault_guard_status` | Return structured JSON with vault and lock state |
-| `vault_guard_begin` | Preflight and create a run-owned lock marker |
-| `vault_guard_finish` | Re-check run-owned lock and split-persist readiness |
-
-The advisory lock is stored at `.pi/vault-guard/lock.json`, which is ignored as local runtime state. Active locks owned by another session block begin; stale or malformed markers are reported without crashing. Begin metadata includes issue ID/identifier, session ID, purpose, and owner.
-
-Begin serializes read/stale takeover/exclusive creation with a transient
-`lock.json.begin` guard. Concurrent cooperating begin calls cannot remove a new
-owner's marker using an older stale snapshot. A busy/unavailable begin guard
-blocks without deleting either marker. The guard is never aged out automatically:
-after a crashed begin or cleanup failure, confirm that no begin writer is active
-before removing the retained guard. This is an advisory local-filesystem protocol,
-not protection against external programs deleting its files or older clients
-that do not follow the protocol. Status remains read-only.
-
-After guarded edits, `vault_guard_finish` checks that the supplied session still
-owns the lock, re-runs vault status, and reports whether split persistence is
-ready. It only removes that session's lock when `removeLock: true` and finish
-is not blocked. The recommended `vault-split-commit.py --apply --push` command
-is reported for handoff but is never run by the tool.
-
-## Status warnings and Obsidian Git
-
-Status output calls out dirty `.pi/settings.json`, other `.pi/` runtime state,
-untracked files, export-like files, generated calendars/reports, and tracked
-files that match `.gitignore`. Each risky path includes reason codes and whether
-Git considers it tracked or untracked. These are review prompts, not proof that
-a file is unrelated; inspect false positives and include only intended vault
-changes in persistence.
-
-Possible Obsidian Git auto-backups are identified heuristically from
-configurable literal commit-subject markers. Safe defaults include
-`Obsidian Git`, `auto backup`, and `vault backup`, plus a cluster of three unpushed commits
-within a configurable timestamp window. The status tool accepts additional
-`autoBackupSubjectPatterns` and an `autoBackupTimestampWindowMinutes` value
-(5–120 minutes); patterns are literal substrings, not regular expressions.
-Matching only indicates a possibility and does not establish which plugin
-created a commit. Review the commit subjects and timestamps before acting.
-
-When these signals appear, status provides dry-run guidance to review the
-Obsidian Git backup interval and commit-message template. Vault Guard does not
-read, edit, or otherwise change Obsidian Git plugin configuration. It also does
-not decide whether to commit/push, clean or discard files, or override plugin
-settings; those remain explicit maintainer decisions.
-
-## Local install / dogfood
-
-Load this package from your Obsidian vault checkout for dogfood:
-
-```bash
-cd path/to/your/obsidian-vault
-pi install git:github.com/eiei114/pi-vault-guard -l
+```json
+{
+  "vault_guard_status": { "vaultRoot": "/path/to/vault" },
+  "vault_guard_begin": {
+    "vaultRoot": "/path/to/vault",
+    "issueId": "issue-id",
+    "issueIdentifier": "DOT-123",
+    "sessionId": "unique-session-id",
+    "purpose": "review and edit approved notes",
+    "owner": { "type": "agent", "id": "agent-id" }
+  },
+  "vault_guard_finish": {
+    "vaultRoot": "/path/to/vault",
+    "sessionId": "unique-session-id",
+    "removeLock": true
+  }
+}
 ```
 
-Or install from a local clone while developing:
+Call status before begin, and review the full result before editing or deciding what to persist. Finish does not commit or push: it may recommend `python vault-split-commit.py --apply --push`, but that command is only guidance and is never executed by this package. `removeLock: true` removes only this session's lock and only when finish has no blockers; warnings can still make `splitPersistReady` false.
 
-```bash
-cd C:/Users/Keisu/Projects/OSS/pi-vault-guard
-npm install
-pi install . -l
-```
+## Reading warnings
 
-Restart Pi, then run:
+- `ok` means no warning signals were detected; it is not an approval to persist. Review all dirty paths and branch information.
+- Suspicious paths include `.pi/settings.json`, other `.pi/` runtime state, exports, generated calendars/reports, and ignored-but-tracked files. Each path includes a reason and whether Git tracks it. These are review prompts, not proof that a file is unrelated.
+- Possible Obsidian Git backups are heuristic signals, not attribution. Built-in literal subject markers include `Obsidian Git`, `auto backup`, and `vault backup`; a cluster of three unpushed commits in the configured time window can also match. Additional subject markers are literal strings, not regular expressions.
+- A non-Git directory, detached branch, branch behind its upstream, malformed lock, or Git status error needs attention. An active lock owned by another session blocks begin and finish; do not remove another owner's lock.
+- `finish` warnings mean split persistence is not ready even when `blocked` is false. Resolve or explicitly adjudicate warnings before using any persistence workflow.
 
-```text
-/vault-guard:status
-```
+Possible Obsidian Git signals include dry-run suggestions to review the plugin's backup interval and commit-message template. Vault Guard never reads or changes Obsidian Git configuration.
 
-You should see vault root, guard version, severity, and lock state. Agents can call `vault_guard_status` or `vault_guard_begin` for structured JSON.
+## Safety and limitations
+
+- Status only reads Git state. Begin writes an advisory lock at `.pi/vault-guard/lock.json`; finish removes it only when asked and after verifying ownership. Add `.pi/vault-guard/` to the vault's `.gitignore` if it is not already ignored.
+- The lock is local filesystem coordination for cooperating runs, not a distributed lock or protection from other programs that ignore it. Inspect a stale or malformed marker before taking action; a stale marker may be replaced by begin.
+- The package never commits, pushes, fetches, resets, stashes, cleans, checks out branches, deletes vault content, or edits Obsidian/plugin settings. Warnings and heuristic matches can have false positives and require human review.
+- Status uses the local Git checkout and existing upstream-tracking information; it does not fetch to refresh remote state.
+- The tools do not decide which files belong in a change or grant permission to persist them. Keep persistence and destructive Git operations under the maintainer's explicit control.
 
 ## Development
 
-```bash
-npm install
+```sh
+npm ci
 npm run ci
-pi -e .
+pi -e ./extensions/index.ts
 ```
 
+See [`PUBLISH_HANDOFF.md`](PUBLISH_HANDOFF.md) for the human-owned release and publication steps.
 ## License
 
 MIT

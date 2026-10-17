@@ -13,11 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-18
+
 ### Added
 
-- Add reason-coded dirty-path warnings, tracked/untracked context, and dry-run Obsidian Git guidance.
+- Add `vault_guard_finish` to verify the run-owned lock and split-persist readiness before handoff.
+- Report reason-coded dirty paths with tracked/untracked context and dry-run Obsidian Git guidance.
 - Flag possible Obsidian Git auto-backups using configurable literal subject markers and commit timestamp clusters.
-- Add `vault_guard_finish` to verify run-owned lock and split-persist readiness before handoff.
+- Document installation, status/begin/finish usage, warning meanings, safety guarantees, and limitations.
 
 ### Changed
 
@@ -25,8 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Escape control characters from Obsidian Git commit subjects in status output.
-- Parse NUL-delimited Git status paths so ignored tracked files with non-ASCII names and rename destinations are classified correctly.
+- Escape control characters in Obsidian Git commit subjects shown in status output.
+- Parse NUL-delimited Git status paths so ignored tracked non-ASCII names and rename destinations are classified correctly.
 
 ## [0.1.1] - 2026-10-16
 
