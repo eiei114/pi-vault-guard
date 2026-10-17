@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildVaultGuardFinish } from "../lib/finish.ts";
 import { buildVaultGuardBegin, lockPath } from "../lib/lock.ts";
+import { formatSuspiciousDirtyPathWarning } from "../lib/path-display.ts";
 
 function createVault() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-finish-"));
@@ -42,6 +43,20 @@ function cleanup({ root, remote }) {
   fs.rmSync(remote, { recursive: true, force: true });
 }
 
+test("finish path warnings escape control characters without changing the raw path", () => {
+  const rawPath = "reports/summary\n  severity: ok\u001b[2J.csv";
+  const paths = [{ path: rawPath, reasonCodes: ["generated-report"], tracking: "tracked" }];
+  const warning = formatSuspiciousDirtyPathWarning(paths);
+
+  assert.equal(
+    warning,
+    "suspicious dirty paths require review: reports/summary\\u{000a}  severity: ok\\u{001b}[2J.csv (generated-report; tracked)",
+  );
+  assert.equal(warning.includes("\u001b"), false);
+  assert.equal(paths[0].path, rawPath);
+  assert.equal(formatSuspiciousDirtyPathWarning([]), undefined);
+});
+
 test("ready finish confirms the owned lock and recommends split persistence", () => {
   const vault = createVault();
   try {
@@ -67,7 +82,8 @@ test("suspicious dirty paths warn and prevent split-persist readiness", () => {
     assert.equal(result.blocked, false);
     assert.equal(result.severity, "warn");
     assert.equal(result.splitPersistReady, false);
-    assert.match(result.warnings.join(" "), /exports\//);
+    assert.match(result.warnings.join(" "), /exports\/report\.csv \(export-file\/generated-report\/untracked; untracked\)/);
+    assert.doesNotMatch(result.warnings.join(" "), /auto-backup heuristic/);
     assert.equal(result.lockRemoved, true);
     assert.equal(fs.existsSync(lockPath(vault.root)), false);
   } finally {
@@ -148,7 +164,7 @@ test("unpushed Obsidian Git auto-backup-looking commits warn", () => {
     const result = buildVaultGuardFinish({ vaultRoot: vault.root, sessionId: "session-1" });
     assert.equal(result.blocked, false);
     assert.equal(result.splitPersistReady, false);
-    assert.match(result.warnings.join(" "), /auto-backup state/);
+    assert.match(result.warnings.join(" "), /auto-backup heuristic; verify before acting/);
     assert.equal(result.lock.state, "owned");
   } finally {
     cleanup(vault);

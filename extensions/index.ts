@@ -8,6 +8,16 @@ import { buildVaultGuardStatus, type VaultGuardStatusResult } from "../lib/statu
 
 const statusParameters = Type.Object({
   vaultRoot: Type.Optional(Type.String({ description: "Vault root; defaults to the current working directory" })),
+  autoBackupSubjectPatterns: Type.Optional(Type.Array(Type.String({
+    minLength: 1,
+    maxLength: 80,
+    description: "Additional literal subject markers; safe built-in patterns always remain enabled",
+  }), { maxItems: 10 })),
+  autoBackupTimestampWindowMinutes: Type.Optional(Type.Integer({
+    minimum: 5,
+    maximum: 120,
+    description: "Flag a possible backup cadence when three unpushed commits fall within this window",
+  })),
 });
 
 const beginParameters = Type.Object({
@@ -85,7 +95,10 @@ export default function (pi: ExtensionAPI) {
         return { content: [{ type: "text", text: "Cancelled" }], details: {} };
       }
 
-      const status = buildVaultGuardStatus(params.vaultRoot);
+      const status = buildVaultGuardStatus(params.vaultRoot, {
+        autoBackupSubjectPatterns: params.autoBackupSubjectPatterns,
+        autoBackupTimestampWindowMinutes: params.autoBackupTimestampWindowMinutes,
+      });
       const json = formatStatusJson(status);
 
       return {

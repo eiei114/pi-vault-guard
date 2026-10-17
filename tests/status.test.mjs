@@ -23,6 +23,144 @@ test("parses porcelain paths and classifies risky files", () => {
     { path: "exports/report.pdf", kind: "untracked" },
   ]);
   assert.equal(classifyDirtyPath(".pi/settings.json", " M"), "pi-settings");
+  assert.deepEqual(paths[1].reasonCodes, ["pi-settings", "untracked"]);
+  assert.equal(paths[1].tracking, "untracked");
+  assert.equal(paths[1].suspicious, true);
+});
+
+test("parses NUL-delimited paths and uses the destination path for renames", () => {
+  const paths = parsePorcelainStatus(
+    "## main...origin/main\0R  café/new note.txt\0old note.txt\0 M notes.md\0",
+    new Set(["café/new note.txt"]),
+  );
+  assert.deepEqual(paths.map(({ path, status, reasonCodes }) => ({ path, status, reasonCodes })), [
+    { path: "café/new note.txt", status: "R ", reasonCodes: ["ignored-tracked"] },
+    { path: "notes.md", status: " M", reasonCodes: ["tracked-file"] },
+  ]);
+});
+
+test("status text escapes control characters in paths while preserving structured paths", () => {
+  const rawPath = "exports/report\n  severity: ok\u001b[2J.csv";
+  const [dirtyPath] = parsePorcelainStatus(` M ${rawPath}\0`);
+  const status = {
+    vaultRoot: "/vault",
+    guardVersion: "0.2.0",
+    isGitRepository: true,
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 0,
+    behind: 0,
+    suspiciousDirtyPaths: [dirtyPath],
+    unpushedCommitCount: 0,
+    likelyObsidianGitAutoBackup: false,
+    gitErrors: [],
+    recommendedNextAction: "review",
+    message: "requires review",
+  };
+
+  assert.equal(dirtyPath.path, rawPath);
+  const text = formatStatusText(status);
+  assert.ok(text.includes("exports/report\\u{000a}  severity: ok\\u{001b}[2J.csv [export-file; tracked]"));
+  assert.equal(text.includes("\u001b"), false);
+  assert.equal(text.includes(rawPath), false);
+  assert.equal(JSON.parse(formatStatusJson(status)).suspiciousDirtyPaths[0].path, rawPath);
+});
+
+test("assigns distinct reason codes to runtime, export, generated, and ordinary paths", () => {
+  const paths = parsePorcelainStatus([
+    " M .pi/cache/session.json",
+    " M exports/notes.md",
+    " M generated/calendars/week.ics",
+    " M reports/monthly.md",
+    " M notes.md",
+  ].join("\n"));
+  assert.deepEqual(paths.map(({ path, reasonCodes, tracking }) => ({ path, reasonCodes, tracking })), [
+    { path: ".pi/cache/session.json", reasonCodes: ["pi-runtime"], tracking: "tracked" },
+    { path: "exports/notes.md", reasonCodes: ["export-file"], tracking: "tracked" },
+    { path: "generated/calendars/week.ics", reasonCodes: ["generated-calendar"], tracking: "tracked" },
+    { path: "reports/monthly.md", reasonCodes: ["generated-report"], tracking: "tracked" },
+    { path: "notes.md", reasonCodes: ["tracked-file"], tracking: "tracked" },
+  ]);
+  assert.equal(paths.at(-1).suspicious, false);
+  assert.match(paths[0].reasons[0], /runtime state/);
+});
+
+test("marks ignored-but-tracked dirty paths without confusing them with untracked files", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-ignored-tracked-"));
+  const git = (args, input) => execFileSync("git", ["-C", tmpDir, ...args], { input, encoding: "utf8", stdio: input ? ["pipe", "ignore", "ignore"] : "ignore" });
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  fs.writeFileSync(path.join(tmpDir, "build.out"), "initial\n");
+  git(["add", "build.out"]);
+  git(["commit", "-q", "-m", "initial"]);
+  fs.writeFileSync(path.join(tmpDir, ".gitignore"), "build.out\n");
+  fs.writeFileSync(path.join(tmpDir, "build.out"), "updated\n");
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    const ignored = status.suspiciousDirtyPaths.find(({ path: dirtyPath }) => dirtyPath === "build.out");
+    assert.ok(ignored);
+    assert.equal(ignored.tracking, "tracked");
+    assert.ok(ignored.reasonCodes.includes("ignored-tracked"));
+    assert.match(ignored.reasons.join(" "), /ignore rules do not prevent it from being persisted/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("detects ignored tracked non-ASCII paths with core.quotePath enabled", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-ignored-tracked-unicode-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  const unicodeDir = path.join(tmpDir, "café");
+  fs.mkdirSync(unicodeDir);
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  git(["config", "core.quotePath", "true"]);
+  fs.writeFileSync(path.join(unicodeDir, "note.txt"), "initial\n");
+  fs.writeFileSync(path.join(tmpDir, ".gitignore"), "café/note.txt\n");
+  git(["add", ".gitignore"]);
+  git(["add", "-f", "café/note.txt"]);
+  git(["commit", "-q", "-m", "initial"]);
+  fs.writeFileSync(path.join(unicodeDir, "note.txt"), "updated\n");
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    const ignored = status.suspiciousDirtyPaths.find(({ path: dirtyPath }) => dirtyPath === "café/note.txt");
+    assert.ok(ignored);
+    assert.equal(ignored.tracking, "tracked");
+    assert.ok(ignored.reasonCodes.includes("ignored-tracked"));
+    assert.ok(status.gitErrors.every((error) => !error.startsWith("check-ignore:")));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("checks the destination of a NUL-delimited rename for ignored tracking", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-ignored-rename-"));
+  const git = (args) => execFileSync("git", ["-C", tmpDir, ...args], { stdio: "ignore" });
+  fs.mkdirSync(path.join(tmpDir, "café"));
+  git(["init", "-q"]);
+  git(["config", "user.name", "Vault Guard Test"]);
+  git(["config", "user.email", "vault-guard@example.invalid"]);
+  git(["config", "core.quotePath", "true"]);
+  fs.writeFileSync(path.join(tmpDir, "old.txt"), "same content\n");
+  fs.writeFileSync(path.join(tmpDir, ".gitignore"), "café/new.txt\n");
+  git(["add", ".gitignore", "old.txt"]);
+  git(["commit", "-q", "-m", "initial"]);
+  git(["mv", "-f", "old.txt", "café/new.txt"]);
+
+  try {
+    const status = buildVaultGuardStatus(tmpDir);
+    const renamed = status.dirtyPaths.find(({ path: dirtyPath }) => dirtyPath === "café/new.txt");
+    assert.ok(renamed);
+    assert.equal(renamed.tracking, "tracked");
+    assert.ok(renamed.reasonCodes.includes("ignored-tracked"));
+    assert.equal(status.dirtyPaths.some(({ path: dirtyPath }) => dirtyPath === "old.txt"), false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test("parses ahead and behind counts", () => {
@@ -54,6 +192,12 @@ test("parses branch metadata from porcelain status headers", () => {
     upstream: null,
     ahead: 0,
     behind: 0,
+  });
+  assert.deepEqual(parsePorcelainBranch("## main...origin/main [ahead 3, behind 2]\0 M notes.md\0"), {
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 3,
+    behind: 2,
   });
 });
 
@@ -89,6 +233,85 @@ test("reports all unpushed commits while previewing only the five newest", () =>
     assert.equal(status.ahead, 6);
     assert.equal(status.unpushedCommitCount, 6);
     assert.deepEqual(status.recentUnpushedCommitSubjects, ["change 6", "change 5", "change 4", "change 3", "change 2"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+  }
+});
+
+test("configurable literal backup markers and unpushed timestamp clusters are heuristic-only", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-patterns-"));
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-patterns-remote-"));
+  const git = (root, args, env = {}) => execFileSync("git", ["-C", root, ...args], {
+    stdio: "ignore",
+    env: { ...process.env, ...env },
+  });
+  git(remoteDir, ["init", "--bare", "-q"]);
+  git(tmpDir, ["init", "-q"]);
+  git(tmpDir, ["config", "user.name", "Vault Guard Test"]);
+  git(tmpDir, ["config", "user.email", "vault-guard@example.invalid"]);
+  git(tmpDir, ["branch", "-M", "main"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "initial\n");
+  git(tmpDir, ["add", "."]);
+  git(tmpDir, ["commit", "-q", "-m", "initial"]);
+  git(tmpDir, ["remote", "add", "origin", remoteDir]);
+  git(tmpDir, ["push", "-q", "-u", "origin", "main"]);
+
+  try {
+    const dates = ["2026-10-14T10:00:00Z", "2026-10-14T10:10:00Z", "2026-10-14T10:20:00Z"];
+    for (let index = 0; index < dates.length; index += 1) {
+      fs.writeFileSync(path.join(tmpDir, "notes.md"), `change ${index}\n`);
+      git(tmpDir, ["commit", "-q", "-am", `ordinary update ${index}`], {
+        GIT_AUTHOR_DATE: dates[index],
+        GIT_COMMITTER_DATE: dates[index],
+      });
+    }
+
+    const timestampMatch = buildVaultGuardStatus(tmpDir);
+    assert.equal(timestampMatch.likelyObsidianGitAutoBackup, true);
+    assert.match(timestampMatch.obsidianGitAutoBackupSignals.join(" "), /timestamp window/);
+    assert.equal(timestampMatch.obsidianGitConfigGuidance.mode, "dry-run");
+    assert.equal(timestampMatch.obsidianGitConfigGuidance.changesApplied, false);
+    assert.equal(buildVaultGuardStatus(tmpDir, { autoBackupTimestampWindowMinutes: 5 }).likelyObsidianGitAutoBackup, false);
+    assert.match(formatStatusText(timestampMatch), /possible Obsidian Git auto-backup: heuristic match/);
+
+    const markerMatch = buildVaultGuardStatus(tmpDir, { autoBackupSubjectPatterns: ["ordinary update"] });
+    assert.equal(markerMatch.likelyObsidianGitAutoBackup, true);
+    assert.match(markerMatch.obsidianGitAutoBackupSignals.join(" "), /configured backup marker/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+  }
+});
+
+test("status text escapes control characters in matching backup commit subjects", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-controls-"));
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-guard-backup-controls-remote-"));
+  const git = (root, args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+  git(remoteDir, ["init", "--bare", "-q"]);
+  git(tmpDir, ["init", "-q"]);
+  git(tmpDir, ["config", "user.name", "Vault Guard Test"]);
+  git(tmpDir, ["config", "user.email", "vault-guard@example.invalid"]);
+  git(tmpDir, ["branch", "-M", "main"]);
+  fs.writeFileSync(path.join(tmpDir, "notes.md"), "initial\n");
+  git(tmpDir, ["add", "."]);
+  git(tmpDir, ["commit", "-q", "-m", "initial"]);
+  git(tmpDir, ["remote", "add", "origin", remoteDir]);
+  git(tmpDir, ["push", "-q", "-u", "origin", "main"]);
+
+  try {
+    const subject = "Obsidian Git backup\u001b[2J\r severity: ok";
+    fs.writeFileSync(path.join(tmpDir, "notes.md"), "updated\n");
+    git(tmpDir, ["commit", "-q", "-am", subject]);
+
+    const status = buildVaultGuardStatus(tmpDir);
+    assert.equal(status.likelyObsidianGitAutoBackup, true);
+    assert.ok(status.obsidianGitAutoBackupSignals[0].includes("\u001b"));
+    assert.ok(status.obsidianGitAutoBackupSignals[0].includes("\r"));
+    const text = formatStatusText(status);
+    assert.ok(text.includes("Obsidian Git backup\\u{001b}[2J\\u{000d} severity: ok"));
+    assert.equal(text.includes("\u001b"), false);
+    assert.equal(text.includes("\r"), false);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.rmSync(remoteDir, { recursive: true, force: true });
@@ -182,7 +405,10 @@ test("scopes nested vault status and ignores inherited git locations", () => {
     ]);
     assert.deepEqual(status.trackedDirtyPaths, ["vault/.pi/settings.json", "vault/inside.md"]);
     assert.deepEqual(status.untrackedPaths, ["vault/draft.md"]);
-    assert.deepEqual(status.suspiciousPaths, ["vault/draft.md"]);
+    assert.deepEqual(status.suspiciousPaths, ["vault/.pi/settings.json", "vault/draft.md"]);
+    assert.equal(status.suspiciousDirtyPaths[0].reasonCodes[0], "pi-settings");
+    assert.equal(status.suspiciousDirtyPaths[0].tracking, "tracked");
+    assert.match(formatStatusText(status), /vault\/\.pi\/settings\.json \[pi-settings; tracked\]/);
     assert.equal(status.gitErrors.length, 0);
   } finally {
     if (previousGitDir === undefined) delete process.env.GIT_DIR;
