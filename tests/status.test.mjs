@@ -28,6 +28,17 @@ test("parses porcelain paths and classifies risky files", () => {
   assert.equal(paths[1].suspicious, true);
 });
 
+test("normalizes Windows separators consistently for path classification and reason codes", () => {
+  const windowsPath = String.raw`reports\monthly\summary.md`;
+  const [entry] = parsePorcelainStatus(` M ${windowsPath}\n`);
+
+  assert.equal(classifyDirtyPath(windowsPath, " M"), "generated-or-export");
+  assert.deepEqual(
+    { path: entry.path, kind: entry.kind, reasonCodes: entry.reasonCodes },
+    { path: windowsPath, kind: "generated-or-export", reasonCodes: ["generated-report"] },
+  );
+});
+
 test("parses NUL-delimited paths and uses the destination path for renames", () => {
   const paths = parsePorcelainStatus(
     "## main...origin/main\0R  café/new note.txt\0old note.txt\0 M notes.md\0",
