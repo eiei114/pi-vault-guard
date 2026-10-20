@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Require an explicit, version-confirmed manual release dispatch on `main` before creating a release or triggering npm publish.
+- Share Git path separator normalization between dirty-path classification and reason-code generation.
 
 ### Fixed
 

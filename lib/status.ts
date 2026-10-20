@@ -198,8 +198,12 @@ export function parsePorcelainBranch(output: string): {
   };
 }
 
+function normalizeGitPath(path: string): string {
+  return path.includes("\\") ? path.replaceAll("\\", "/") : path;
+}
+
 export function classifyDirtyPath(path: string, status = "  "): DirtyPathKind {
-  const normalized = path.includes("\\") ? path.replaceAll("\\", "/") : path;
+  const normalized = normalizeGitPath(path);
   if (status === "??") return "untracked";
   if (/(^|\/)\.pi\/settings\.json$/i.test(normalized)) return "pi-settings";
   if (/(^|\/)\.pi\//i.test(normalized)) return "pi-runtime";
@@ -221,7 +225,7 @@ const DIRTY_PATH_REASONS: Record<DirtyPathReasonCode, string> = {
 };
 
 function dirtyPathReasonCodes(path: string, tracking: DirtyPathTracking, ignoredTracked: boolean): DirtyPathReasonCode[] {
-  const normalized = path.includes("\\") ? path.replaceAll("\\", "/") : path;
+  const normalized = normalizeGitPath(path);
   const codes: DirtyPathReasonCode[] = [];
   if (/(^|\/)\.pi\/settings\.json$/i.test(normalized)) codes.push("pi-settings");
   else if (/(^|\/)\.pi\//i.test(normalized)) codes.push("pi-runtime");
