@@ -6,7 +6,7 @@ The canonical `main` manifest is already at `0.2.1`. Because the updated README 
 
 After reviewing and merging the PR, a maintainer should:
 
-1. On `main`, confirm `package.json` is exactly `0.2.2`, review the `0.2.2` changelog entry and the package contents, and verify that tag `v0.2.2` does not exist.
+1. On `main`, confirm `package.json` is exactly `0.2.2`, review the `Unreleased` changelog section and the package contents, and verify that tag `v0.2.2` does not exist.
 2. Confirm the release candidate checks on `main` pass: `npm run ci`, `npm pack --dry-run`, and `npm publish --dry-run`.
 3. In GitHub Actions, run **Manual Release** on `main`, set `version` to `0.2.2`, and explicitly set `confirm_release` to `true`. That workflow creates `v0.2.2` and a GitHub release, then dispatches the publish workflow for that tag. The publish workflow performs the actual `npm publish --access public` using npm Trusted Publishing.
 4. Verify the public package only after the maintainer-owned release/publish workflow completes.
